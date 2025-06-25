@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uaibot"
-version = "1.2.3"
+version = "1.2.4"
 description = "Uaibot, online robotic simulator"
 readme = "README.md"
 requires-python = ">=3.10"
