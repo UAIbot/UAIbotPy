@@ -137,6 +137,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+myenv/
 
 # Spyder project settings
 .spyderproject
@@ -189,3 +190,4 @@ uaibot/tests/test_o2o_smooth.html
 uaibot/tests/control.html
 *.html
 .vscode/
+testinho.py
