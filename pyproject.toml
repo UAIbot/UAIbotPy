@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uaibot"
-version = "1.2.6"
+version = "1.2.7"
 description = "Uaibot, online robotic simulator"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -27,7 +27,7 @@ dependencies = [
     "requests",
     "scipy>=1.10",
 ]
-license-files = ['LICEN[CS]E*']
+
 keywords = ["robotics", "simulator"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -67,6 +67,7 @@ test = [
 [tool.setuptools]
 include-package-data = true
 zip-safe = false
+license-files = ['LICEN[CS]E*']
 
 [tool.setuptools.packages.find]
 include = ["uaibot*"]
@@ -74,3 +75,39 @@ include = ["uaibot*"]
 [tool.setuptools.package-data]
 "uaibot.simulation" = ["*.js"]
 "uaibot" = ["c_implementation/**/*"]
+
+[tool.cibuildwheel]
+# Build for Python 3.10-3.13
+build = ["cp310-*", "cp311-*", "cp312-*", "cp313-*"]
+before-build = "pip install pybind11"
+build-verbosity = 1
+
+# Linux configuration
+[tool.cibuildwheel.linux]
+manylinux-x86_64-image = "manylinux_2_34"
+archs = "x86_64"
+test-command = "python -c 'import uaibot; print(uaibot.__version__); import uaibot_cpp_bind'"
+
+# macOS configuration
+[tool.cibuildwheel.macos]
+archs = "auto"
+test-command = "python -c 'import uaibot; print(uaibot.__version__); import uaibot_cpp_bind'"
+#archs = "universal2"  
+# Universal builds for both x86_64 and arm64 -- Currently not working with cibuildwheel
+# Note: Universal builds may require additional configuration in the future (CMakelists, setuptools, etc.)
+
+# Windows configuration
+[tool.cibuildwheel.windows]
+archs = "AMD64"
+test-command = "python -c \"import uaibot; print(uaibot.__version__); import uaibot_cpp_bind\""
+
+# [tool.coverage.run]
+# branch = true
+# source = ["uaibot"]
+#
+# [tool.coverage.report]
+# # include_namespace_packages = true
+# show_missing = true
+#
+# [tool.pytest.ini_options]
+# pythonpath = ["."]

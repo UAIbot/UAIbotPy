@@ -2,6 +2,7 @@ from utils import *
 
 from graphics.meshmaterial import *
 from graphics.model3d import *
+from graphics.mtlmeshmaterial import *
 
 from simobjects.ball import *
 from simobjects.box import *
@@ -77,8 +78,8 @@ def _create_abb_crb(htm, name, color, opacity):
             'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/base_link.obj',
             scale,
             htm0,
-            MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color="#606060",
-                         opacity=opacity))]
+            MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/base_link.mtl', 
+                        opacity=opacity))]
 
     link_3d_obj = []
 
@@ -86,48 +87,59 @@ def _create_abb_crb(htm, name, color, opacity):
         [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/link1.obj',
                  scale,
                  htm1,
-                 MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color="#606060",
-                              opacity=opacity))]
+                 MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/link1.mtl', 
+                        opacity=opacity))]
+   
     )
 
     link_3d_obj.append(
         [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/link2.obj',
                  scale,
                  htm2,
-                 MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color="#606060",
-                              opacity=opacity))]
+                 MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/link2.mtl', 
+                        opacity=opacity))]
     )
 
     link_3d_obj.append(
         [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/link3.obj',
                  scale,
                  htm3,
-                 MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color="#606060",
-                              opacity=opacity))]
+                 MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/link3.mtl', 
+                        opacity=opacity))]
     )
 
     link_3d_obj.append(
         [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/link4.obj',
                  scale,
                  htm4,
-                 MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color=color,
-                              opacity=opacity))]
+                 MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/link4.mtl', 
+                        opacity=opacity))]
     )
 
     link_3d_obj.append(
         [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/link5.obj',
                  scale,
                  htm5,
-                 MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color=color,
-                              opacity=opacity))]
+                 MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/link5.mtl', 
+                        opacity=opacity))]
     )
 
     link_3d_obj.append(
         [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/link6.obj',
                  scale,
                  htm6,
-                 MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color="silver",
-                              opacity=opacity))]
+                MeshMaterial(color="#BEBEBE",
+                             metalness=1.0, 
+                             clearcoat=1, 
+                             clearcoat_roughness=0.2, 
+                             roughness=0.5, 
+                             normal_scale=[0.5, 0.5], 
+                             normal_map="https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/ABBCRB15000/metallic_lines.png",
+                             opacity=opacity,
+                        emissive="#555454", 
+                        emissive_intensity=0.1,
+                    )
+                )]
     )
 
     # Create links

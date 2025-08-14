@@ -1,6 +1,7 @@
 from utils import *
 
 from graphics.meshmaterial import *
+from graphics.mtlmeshmaterial import *
 from graphics.model3d import *
 
 from simobjects.ball import *
@@ -60,60 +61,60 @@ def _create_kuka_kr5(htm, name, color, opacity):
     htm7 = np.matrix([[1., 0., 0., 0.], [0., 0.0008, -1., 0.], [0., 1., 0.0008, -0.012], [0., 0., 0., 1.]])
     
     base_3d_obj = [
-        Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5/Base.obj',
+        Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Base.obj',
                 0.001,
                 htm1,
-                MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color="#242526",
+                MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Base.mtl',
                              opacity=opacity))]
 
     link_3d_obj = []
 
     link_3d_obj.append(
-        [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5/Axis1.obj',
+        [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Axis1.obj',
                  0.001,
                  htm2,
-                 MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color=color,
-                              opacity=opacity))]
+                 MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Axis1.mtl',
+                             opacity=opacity))]
     )
 
     link_3d_obj.append(
-        [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5/Axis2.obj',
+        [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Axis2.obj',
                  0.001,
                  htm3,
-                 MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color=color,
-                              opacity=opacity))]
+                 MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Axis2.mtl',
+                             opacity=opacity))]
     )
 
     link_3d_obj.append(
-        [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5/Axis3.obj',
+        [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Axis3.obj',
                  0.001,
                  htm4,
-                 MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color=color,
-                              opacity=opacity))]
+                 MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Axis3.mtl',
+                             opacity=opacity))]
     )
 
     link_3d_obj.append(
-        [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5/Axis4.obj',
+        [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Axis4.obj',
                  0.001,
                  htm5,
-                 MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color=color,
-                              opacity=opacity))]
+                 MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Axis4.mtl',
+                             opacity=opacity))]
     )
 
     link_3d_obj.append(
-        [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5/Axis5.obj',
+        [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Axis5.obj',
                  0.001,
                  htm6,
-                 MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color=color,
-                              opacity=opacity))]
+                 MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Axis5.mtl',
+                             opacity=opacity))]
     )
 
     link_3d_obj.append(
-        [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5/Axis6.obj',
+        [Model3D('https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Axis6.obj',
                  0.001,
                  htm7,
-                 MeshMaterial(metalness=0.7, clearcoat=1, roughness=0.5, normal_scale=[0.5, 0.5], color="#242526",
-                              opacity=opacity))]
+                 MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KukaKR5_updated/Axis6.mtl',
+                             opacity=opacity))]
     )
 
     # Create links

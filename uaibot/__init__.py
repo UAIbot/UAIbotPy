@@ -1,4 +1,9 @@
-__version__ = '0.0.21'
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("uaibot")
+except PackageNotFoundError:
+    __version__ = "unknown"
 
 import os
 import sys
@@ -9,8 +14,6 @@ current_dir = os.path.dirname(__file__)
 # Add the directory of __init__.py to sys.path
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
-
-
 
 try:
     import uaibot_cpp_bind as ub_cpp

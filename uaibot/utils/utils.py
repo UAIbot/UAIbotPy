@@ -12,6 +12,7 @@ from typing import Callable
 import urllib.request
 import hashlib
 import os
+from io import BytesIO
 if os.environ['CPP_SO_FOUND']=="1":
     import uaibot_cpp_bind as ub_cpp
 
@@ -640,39 +641,37 @@ class Utils:
             The dictionary with all the problems.
         """          
         
-        
-        def load_npz_from_url_cached(url, cache_dir=".cache"):
-            os.makedirs(cache_dir, exist_ok=True)
+    
+
+        url = "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/MotionPlanningProblems/fishbotics_mp_data.npz"
+        with urllib.request.urlopen(url) as response:
+            data = response.read()
+            all_prob_data_loaded = np.load(BytesIO(data), allow_pickle=True)
             
-            # Create a unique filename based on the URL hash
-            url_hash = hashlib.sha256(url.encode()).hexdigest()
-            local_path = os.path.join(cache_dir, f"{url_hash}.npz")
 
-            # If cached, load from disk
-            if os.path.exists(local_path):
-                return np.load(local_path, allow_pickle=True)
+        all_problems = {}
 
-            # Else, download and save
-            with urllib.request.urlopen(url) as response:
-                data = response.read()
-            with open(local_path, 'wb') as f:
-                f.write(data)
+        for prob_name in all_prob_data_loaded:
+            data = all_prob_data_loaded[prob_name]
+            all_problems[prob_name] = {}
+            all_problems[prob_name]['q0'] = data[0]
+            all_problems[prob_name]['htm_base'] = data[1]
+            all_problems[prob_name]['htm_tg'] = data[2]
+            obs_data = data[3]
             
-            return np.load(local_path, allow_pickle=True)
-
-
-        allproblems_1 = load_npz_from_url_cached("https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/MotionPlanningProblems/fishbotics_mp_problems_part_1.npz")
-        allproblems_2 = load_npz_from_url_cached("https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/MotionPlanningProblems/fishbotics_mp_problems_part_2.npz")
-        allproblems_3 = load_npz_from_url_cached("https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/MotionPlanningProblems/fishbotics_mp_problems_part_3.npz")
-        allproblems_4 = load_npz_from_url_cached("https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/MotionPlanningProblems/fishbotics_mp_problems_part_4.npz")
-          
-                        
-        allproblems_1 = allproblems_1['arr_0'].item()
-        allproblems_2 = allproblems_2['arr_0'].item()
-        allproblems_3 = allproblems_3['arr_0'].item()
-        allproblems_4 = allproblems_4['arr_0'].item()
-        
-        return {**allproblems_1, **allproblems_2, **allproblems_3, **allproblems_4}
+            all_obs = []
+            for od in obs_data:
+                if od[0]==0:
+                    all_obs.append(Box(htm = od[1], width=od[2], depth = od[3], height = od[4], color='magenta'))
+                if od[0]==1:
+                    all_obs.append(Ball(htm = od[1], radius=od[2], color='magenta'))        
+                if od[0]==2:
+                    all_obs.append(Cylinder(htm = od[1], radius=od[2], height=od[3], color='magenta'))    
+                    
+            all_problems[prob_name]['all_obs'] = all_obs  
+            
+        return all_problems
+            
 
     #######################################
     # Type check and conversion functions

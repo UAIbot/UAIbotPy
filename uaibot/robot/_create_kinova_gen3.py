@@ -5,6 +5,7 @@ from uaibot.simobjects.cylinder import Cylinder
 from uaibot.simobjects.box import Box
 from uaibot.graphics.model3d import Model3D
 from uaibot.graphics.meshmaterial import MeshMaterial
+from graphics.mtlmeshmaterial import *
 from uaibot.robot.links import Link
 from uaibot.utils import Utils
 
@@ -145,14 +146,6 @@ def _create_kinova_gen3(
     htm6 = Utils.inv_htm(H06)
     htm7 = Utils.inv_htm(H07)
 
-    mesh1 = MeshMaterial(
-        metalness=0.7,
-        clearcoat=1,
-        roughness=0.5,
-        normal_scale=[0.5, 0.5],
-        color=color,
-        opacity=opacity,
-    )
     scale = 1
 
     base_3d_obj = [
@@ -160,7 +153,8 @@ def _create_kinova_gen3(
             "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_base.obj",
             scale,
             htm_base,
-            mesh1,
+            MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_base.mtl', 
+                    opacity=opacity)
         )
     ]
 
@@ -172,7 +166,8 @@ def _create_kinova_gen3(
                 "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_shoulder.obj",
                 scale,
                 htm1,
-                mesh1,
+                MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_shoulder.mtl', 
+                    opacity=opacity)
             )
         ]
     )
@@ -183,7 +178,8 @@ def _create_kinova_gen3(
                 "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_halfarm1.obj",
                 scale,
                 htm2,
-                mesh1,
+                MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_halfarm1.mtl', 
+                    opacity=opacity)
             )
         ]
     )
@@ -194,7 +190,8 @@ def _create_kinova_gen3(
                 "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_halfarm2.obj",
                 scale,
                 htm3,
-                mesh1,
+                MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_halfarm2.mtl', 
+                    opacity=opacity)
             )
         ]
     )
@@ -205,7 +202,8 @@ def _create_kinova_gen3(
                 "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_forearm.obj",
                 scale,
                 htm4,
-                mesh1,
+                MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_forearm.mtl', 
+                    opacity=opacity)
             )
         ]
     )
@@ -216,7 +214,8 @@ def _create_kinova_gen3(
                 "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_wrist1.obj",
                 scale,
                 htm5,
-                mesh1,
+                MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_wrist1.mtl', 
+                    opacity=opacity)
             )
         ]
     )
@@ -227,7 +226,8 @@ def _create_kinova_gen3(
                 "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_wrist2.obj",
                 scale,
                 htm6,
-                mesh1,
+                MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_wrist2.mtl', 
+                    opacity=opacity)
             )
         ]
     )
@@ -238,10 +238,20 @@ def _create_kinova_gen3(
                 "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_eefNcamera.obj",
                 scale,
                 htm7,
-                mesh1,
+                 MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/Kinova7dof_eefNcamera.mtl', 
+                    opacity=opacity)
+            ),
+            Model3D(
+                "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/gripper.obj",
+                scale,
+                htm7,
+                 MTLMeshMaterial(url = 'https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/RobotModels/KinovaGen3/gripper.mtl', 
+                    opacity=opacity)
             )
         ]
     )
+
+
 
     ## Inertial Parameters
     # Base mass: 1.697 kg
@@ -474,7 +484,7 @@ def _create_kinova_gen3(
         ]
     )
 
-    htm_eef = np.eye(4)
+    htm_eef = Utils.trn([0,0,0.05])
 
     robot_ = rb.Robot(
         name,

@@ -870,6 +870,7 @@ class Robot:
         """
     Create a Kuka KR5 R850, a six-degree of freedom manipulator.
     Thanks Sugi-Tjiu for the 3d model (see https://grabcad.com/library/kuka-kr-5-r850).
+    Textures by João Baião.
 
     Parameters
     ----------
@@ -1042,6 +1043,7 @@ class Robot:
         """
     Create a ABB CRB 15000, a six degree of freedom manipulator.
     Model taken from the ROS github repository (https://github.com/ros-industrial/abb_experimental).
+    Textures by João Baião.
 
     Parameters
     ----------
@@ -1207,7 +1209,7 @@ class Robot:
         Gen3 CAD model (7DoF)). Manipulator parameters taken from the official 
         Kinova Gen3 documentation (GEN3 User Guide), available at
         https://www.kinovarobotics.com/resources.
-        There is no gripper in this model, because it is not available.
+        Textures by João Baião.
 
         Parameters
         ----------
@@ -1285,7 +1287,37 @@ class Robot:
         opacity: float = 1.0,
         eef_frame_visible: bool = True
         ) -> "Robot":
+        """Create a Universal Robotics E3, a six degree of freedom manipulator.
+        Model taken from the manufacturer's website.
+        
+        Parameters
+        ----------
+        htm : 4x4 numpy array or 4x4 nested list
+            The initial base configuration for the robot.
+            (default: np.identity(4))
+        name : string
+            The robot name.
+            (default: empty (automatic)).
+        color : string or list or None
+            A HTML-compatible string representing the object color or a list of
+            HTML-compatible strings representing the object color. The list 
+            should have three elements, representing the color of the links, 
+            plastic rings, and the nails, respectively. If less than three 
+            elements are provided, the remaining elements will be set to the
+            last element of the list. If a single string is provided, it will
+            be used for all three elements.
+            If set to None, the default color scheme is used, which is a list
+            of three strings: ["#3e3f42", "#919090", "#1d1d1f"].
+        opacity : positive float between 0 and 1
+            The opacity of the robot. 1 = fully opaque and 0 = transparent.
+            (default: 1)
 
+        Returns
+        -------
+        robot : Robot object
+            The robot.
+        """
+        
         base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_ur_ur3e(htm, name, color, opacity)
         return Robot(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
 
