@@ -28,6 +28,7 @@ from .utils import *
 from .simulation import *
 from .graphics import *
 from .simobjects import *
+from sfm import *
 
 try:
     from .utils import Utils

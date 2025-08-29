@@ -26,7 +26,7 @@ class Utils:
 
     UAIBOT_NAME_TYPES = ['uaibot.', 'cylinder.', 'box.', 'ball.', 'convexpolytope.', 'robot.', 'simulation.', 'meshmaterial.', 'mtlmeshmaterial.',
                              'glbmeshmaterial.', 'texture.', 'pointlight.', 'frame.', 'model3d.', 'links.', 'pointcloud.', 'arrow.', 'rigidobject.',
-                             '.group', '.htmldiv', 'CPP_GeometricPrimitives', 'CPP_DistStructRobotObj','CPP_AABB']
+                             '.group', '.htmldiv', 'CPP_GeometricPrimitives', 'CPP_DistStructRobotObj','CPP_AABB','.Pedestrian', '.ObstacleColumn', '.ObstacleThinWall']
 
     IS_SIMPLE = ['uaibot.Ball', 'uaibot.Box', 'uaibot.Cylinder', 'uaibot.ConvexPolytope']
     
