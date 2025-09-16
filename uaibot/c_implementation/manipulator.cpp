@@ -2412,6 +2412,20 @@ Eigen::VectorXd invSmapSE3(const Eigen::Matrix4d A){
   return xi;
 }
 
+Eigen::Matrix3f expSO3(const Eigen::Matrix3f A){
+  Eigen::Matrix3f R = Eigen::Matrix3f::Identity();
+  float theta = sqrt(pow(A(1, 0), 2) + pow(A(0, 2), 2) + pow(A(2, 1), 2));
+  // If theta is close to zero, use the first order approximation
+  if (theta < c_theta_zero) {
+    R = Eigen::Matrix3f::Identity();
+  } 
+  else {
+    R = Eigen::Matrix3f::Identity() + (sin(theta) / theta) * A +
+        ((1 - cos(theta)) / pow(theta, 2)) * A * A;
+  }
+  return R;
+}
+
 Eigen::Matrix4d expSE3(const Eigen::Matrix4d X){
   Eigen::Matrix3d A = X.block<3, 3>(0, 0);
   Eigen::Vector3d v = X.block<3, 1>(0, 3);
@@ -2499,3 +2513,181 @@ VectorFieldResult vectorfield_SE3(const Eigen::Matrix4d& state, const vector<Eig
 // -----------------------------------------------------------------------------
 // ------------------------- VECTOR FIELD ON SE(3) END -------------------------
 // -----------------------------------------------------------------------------
+// Skew-symmetric matrix S(omega)
+inline Eigen::Matrix3f skew(const Eigen::Vector3f& w) {
+    Eigen::Matrix3f S;
+    S <<     0, -w(2),  w(1),
+          w(2),     0, -w(0),
+         -w(1),  w(0),     0;
+    return S;
+}
+
+// Saturation: clamp each element between tau_min and tau_max
+inline Eigen::VectorXf saturate(const Eigen::VectorXf& v, float tau_min, float tau_max) {
+    Eigen::VectorXf out = v;
+    for (int i = 0; i < v.size(); i++) {
+        out(i) = std::min(std::max(v(i), tau_min), tau_max);
+    }
+    return out;
+}
+
+DroneState evolve_state(const DroneState& x, const Eigen::VectorXf& u_d, ParametersSim param) 
+{
+    DroneState x_next = x;
+
+    const float g = 9.8f;
+
+    MatrixXf A = param.A;
+    float u_min = param.u_min;
+    float u_max = param.u_max;
+    float M = param.M;
+    float J = param.J;
+    float tc = param.tc;
+    float dt = param.dt;
+
+
+    // --- Forces and torques ---
+    Eigen::VectorXf f_in  = A.topRows(3) * x.u;   // 3x8 * 8x1
+    Eigen::VectorXf tau_in = A.bottomRows(3) * x.u; // 3x8 * 8x1
+
+    Eigen::Vector3f F   = x.Q * f_in;
+  // std::cout << "[DEBUG] INPUT "<< print_vector(x.u) << std::endl;
+  // std::cout << "[DEBUG] FORCE "<< print_vector(F) << std::endl;
+    Eigen::Vector3f tau = x.Q * tau_in;
+  // std::cout << "[DEBUG] TORQUE "<< print_vector(tau) << std::endl;
+  // std::cout << "[DEBUG] ANGULAR VELOCITY "<< print_vector(x.omega) << std::endl;
+
+    // --- Dynamics ---
+    Eigen::Vector3f dp     = x.v;
+    Eigen::Matrix3f dQ     = skew(x.omega) * x.Q;
+    Eigen::Vector3f dv     = (F - M * Eigen::Vector3f(0, 0, g)) / M;
+    Eigen::Vector3f domega = tau / J;
+    Eigen::VectorXf du     = -(x.u - u_d) / tc;
+
+    // --- Discretization (Euler) ---
+    x_next.p     += dt * dp;
+    // x_next.Q     += dt * dQ;
+    x_next.Q = expSO3(dt * skew(x.omega)) * x.Q;
+  
+
+    // Re-orthonormalize Q (to stay in SO(3)) via SVD
+    // Eigen::JacobiSVD<Eigen::Matrix3f> svd(x_next.Q, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    // x_next.Q = svd.matrixU() * svd.matrixV().transpose();
+
+    x_next.v     += dt * dv;
+    x_next.omega += dt * domega;
+    x_next.u     += dt * du;
+    x_next.u     = saturate(x_next.u, u_min, u_max);
+
+    return x_next;
+}
+
+inline Eigen::Matrix4d to_htm(const Eigen::Matrix3f& Q, const Eigen::Vector3f& p) {
+    Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
+    T.block<3,3>(0,0) = Q.cast<double>(); // top-left 3x3 rotation
+    T.block<3,1>(0,3) = p.cast<double>(); // top-right 3x1 translation
+    return T;
+}
+
+vector<DroneState> simulation(const DroneState &x0, 
+    const vector<Eigen::Matrix4d> &curve, const vector<Eigen::MatrixXd> &curve_derivative, 
+    ParametersSim param)
+{
+
+    int N = (int) (param.sim_time/param.dt);
+
+    vector<DroneState> list_x;
+
+    list_x.push_back(x0);
+
+    Vector3f p, v, omega;
+    Matrix3f Q;
+    Vector3f u;
+
+    float kt1 = param.kt1;
+    float kt2 = param.kt2;
+    float kt3 = param.kt3;
+    float kn1 = param.kn1;
+    float kn2 = param.kn2;
+    double delta = param.delta;
+    double ds = param.ds;  
+    MatrixXf A = param.A;
+    MatrixXf pinv_A = param.pinv_A;
+    float dt = param.dt;
+    float kv = param.kv;
+    float komega = param.komega;
+    float M = param.M;
+    float J = param.J;
+    bool transient = true;
+    int steady_index = 0;
+
+
+    for (int i=0; i<N; i++)
+    {
+        //Get the states
+
+        DroneState x = list_x[list_x.size()-1];
+
+
+        p = x.p;
+        v = x.v;
+        Q = x.Q;
+        omega = x.omega;
+        u = x.u;
+
+        VectorXf xi(6);
+        xi << v, omega;
+
+        //Compute xi_d from the vector field and (d/dt) xi_d
+
+        Matrix4d htm = to_htm(Q,p);
+        Matrix4d htm_per = (expSE3(SmapSE3(xi.cast<double>() *dt))*htm);
+        VectorFieldResult vfres = vectorfield_SE3(htm, curve, kt1, kt2, kt3, kn1, kn2, curve_derivative, delta, ds);
+        VectorXf xi_d = vfres.twist;
+      std::cout << "[debug] dist: " << vfres.dist << std::endl;
+        VectorXf xi_d_per = vectorfield_SE3(htm_per, curve, kt1, kt2, kt3, kn1, kn2, curve_derivative, delta, ds).twist;
+        VectorXf dxi_d = (xi_d_per-xi_d)/(dt);
+        //
+
+    if ((i * dt < 10.0f) && (i < 0.4 * N) && (transient)){
+      xi_d = xi_d * 0.0;
+      dxi_d = dxi_d * 0.0;
+    }
+    else {
+        transient = false;
+        steady_index = i;
+    }
+    std::cout << "[DEBUG] XI - XID" << print_vector(xi - xi_d) << std::endl;
+        Vector3f F_d = M*Q.transpose()*( kv*(xi_d.head<3>() - v) + dxi_d.head<3>()  +  Eigen::Vector3f(0, 0, 9.8f))  ;
+        Vector3f tau_d = J*Q.transpose()*( komega*(xi_d.tail<3>() - omega) + dxi_d.tail<3>())  ;
+
+        VectorXf w_d(6);
+        w_d << F_d, tau_d;
+    // std::cout << "[DEBUG] DESIRED FORCE "<< print_vector(F_d) << std::endl;
+    // std::cout << "[DEBUG] DESIRED TORQUE "<< print_vector(tau_d) << std::endl;
+
+        // VectorXf u_d = pinv_A*w_d;
+        MatrixXf H = 2 * A.transpose() * A + 1e-9 * MatrixXf::Identity(8, 8);
+        VectorXf f = -2 * A.transpose() * w_d;
+        MatrixXf A_ineq(16, 8);
+        A_ineq << -MatrixXf::Identity(8, 8),
+                  MatrixXf::Identity(8, 8);
+        VectorXf b_ineq(16);
+        b_ineq << -param.u_max * VectorXf::Ones(8),
+                  param.u_min * VectorXf::Ones(8);
+        // // Solve the QP problem to find the optimal control inputs
+        VectorXf u_d = solveQP(H, f, A_ineq, b_ineq);
+      // std::cout << "[DEBUG] DESIRED INPUT "<< print_vector(u_d) << std::endl;
+      // std::cout << "[DEBUG] Reconstruct err: " << print_vector(A * u_d - w_d) << std::endl;
+
+        DroneState next_x = evolve_state(x, u_d, param);
+
+        list_x.push_back(next_x);
+
+    }
+
+ // return list_x from steady_index to the end
+  return list_x;
+  // return vector<DroneState>(list_x.begin() + steady_index, list_x.end());
+    
+}

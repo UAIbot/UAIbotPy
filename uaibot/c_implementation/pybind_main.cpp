@@ -224,9 +224,40 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
          .def("__str__", &Manipulator::toString)
          .def("__repr__", &Manipulator::toString);
 
+    py::class_<DroneState>(m, "CPP_DroneState")
+        .def(py::init<>())
+        .def_readwrite("p", &DroneState::p)
+        .def_readwrite("v", &DroneState::v)
+        .def_readwrite("Q", &DroneState::Q)
+        .def_readwrite("omega", &DroneState::omega)
+        .def_readwrite("u", &DroneState::u);
+
+    py::class_<ParametersSim>(m, "CPP_ParametersSim")
+        .def(py::init<>())
+        .def_readwrite("A", &ParametersSim::A)
+        .def_readwrite("pinv_A", &ParametersSim::pinv_A)
+        .def_readwrite("M", &ParametersSim::M)
+        .def_readwrite("J", &ParametersSim::J)
+        .def_readwrite("u_min", &ParametersSim::u_min)
+        .def_readwrite("u_max", &ParametersSim::u_max)
+        .def_readwrite("tc", &ParametersSim::tc)
+        .def_readwrite("dt", &ParametersSim::dt)
+        .def_readwrite("sim_time", &ParametersSim::sim_time)
+        .def_readwrite("kt1", &ParametersSim::kt1)
+        .def_readwrite("kt2", &ParametersSim::kt2)
+        .def_readwrite("kt3", &ParametersSim::kt3)
+        .def_readwrite("kn1", &ParametersSim::kn1)
+        .def_readwrite("kn2", &ParametersSim::kn2)
+        .def_readwrite("delta", &ParametersSim::delta)
+        .def_readwrite("ds", &ParametersSim::ds)
+        .def_readwrite("kv", &ParametersSim::kv)
+        .def_readwrite("komega", &ParametersSim::komega);
+
      m.def("vectorfield_rn", &vectorfield_rn, py::arg("q"), py::arg("q_path"), py::arg("alpha"), py::arg("const_velocity"), py::arg("is_closed"), py::arg("gamma"));
      m.def("dp_inv_solve", &dp_inv_solve, py::arg("A"), py::arg("b"), py::arg("eps"));
      m.def("vectorfield_SE3", &vectorfield_SE3, py::arg("state"), py::arg("curve"), py::arg("kt1"), py::arg("kt2"),
            py::arg("kt3"), py::arg("kn1"), py::arg("kn2"), py::arg("curve_derivative")=std::vector<Eigen::MatrixXd>(),
            py::arg("delta") = c_delta, py::arg("ds")=c_ds);
+     m.def("vant_simulation", &simulation, py::arg("x0"), py::arg("curve"), py::arg("curve_derivative"), py::arg("param"));
+
 }

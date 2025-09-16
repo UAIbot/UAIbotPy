@@ -349,6 +349,45 @@ struct Manipulator
 
 };
 
+struct DroneState
+{
+	Vector3f p;
+	Vector3f v;
+	Matrix3f Q;
+	Vector3f omega;
+	VectorXf u;
+};
+
+struct ParametersSim
+{
+    //Drone low level parameters
+    MatrixXf A;
+    MatrixXf pinv_A;
+    float M;
+    float J;
+    float u_min;
+    float u_max;
+    float tc;
+    float dt;
+    float sim_time;
+
+    //Vector field parameters
+    float kt1;
+    float kt2;
+    float kt3;
+    float kn1;
+    float kn2;
+    double delta; 
+    double ds;  
+
+    //Low level controller;
+    float kv;
+    float komega;
+
+};
+
+
+
 int mini(int a, int b);
 
 float maxf(float a, float b);
@@ -419,3 +458,10 @@ VectorXf solveQP(const MatrixXf& H,const VectorXf& f,const MatrixXf& A,const Vec
 
 VectorFieldResult vectorfield_SE3(const Eigen::Matrix4d& state, const vector<Eigen::Matrix4d>& curve, float kt1, float kt2, float kt3, float kn1, float kn2,
     const vector<Eigen::MatrixXd>& curve_derivative=std::vector<Eigen::MatrixXd>(), double delta=c_delta, double ds=c_ds);
+
+vector<DroneState> simulation(const DroneState &x0, 
+    const vector<Eigen::Matrix4d> &curve, const vector<Eigen::MatrixXd> &curve_derivative, 
+    ParametersSim param);
+
+
+
