@@ -356,6 +356,10 @@ struct DroneState
 	Matrix3f Q;
 	Vector3f omega;
 	VectorXf u;
+
+  float distance;
+  int steady_index;
+  int nearest_index;
 };
 
 struct ParametersSim
@@ -383,6 +387,9 @@ struct ParametersSim
     //Low level controller;
     float kv;
     float komega;
+
+    // Noise
+    VectorXf stds;
 
 };
 
@@ -463,5 +470,7 @@ vector<DroneState> simulation(const DroneState &x0,
     const vector<Eigen::Matrix4d> &curve, const vector<Eigen::MatrixXd> &curve_derivative, 
     ParametersSim param);
 
-
-
+Eigen::Matrix3f expSO3(const Eigen::Matrix3f A);
+Eigen::Matrix4d expSE3(const Eigen::Matrix4d X);
+Eigen::Matrix3f skew(const Eigen::Vector3f& w);
+Eigen::Matrix4d SmapSE3(const Eigen::VectorXd xi);

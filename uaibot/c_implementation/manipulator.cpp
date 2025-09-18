@@ -2576,7 +2576,12 @@ DroneState evolve_state(const DroneState& x, const Eigen::VectorXf& u_d, Paramet
 
     x_next.v     += dt * dv;
     x_next.omega += dt * domega;
-    x_next.u     += dt * du;
+    if(tc > 1e-6){
+      x_next.u     += dt * du;
+    }
+    else {
+      x_next.u = u_d;
+    }
     x_next.u     = saturate(x_next.u, u_min, u_max);
 
     return x_next;
@@ -2587,6 +2592,39 @@ inline Eigen::Matrix4d to_htm(const Eigen::Matrix3f& Q, const Eigen::Vector3f& p
     T.block<3,3>(0,0) = Q.cast<double>(); // top-left 3x3 rotation
     T.block<3,1>(0,3) = p.cast<double>(); // top-right 3x1 translation
     return T;
+}
+
+void printProgressBar(int current, int imax) {
+  // Calculate percentage
+  int percent = static_cast<int>(100.0 * current / imax);
+
+  // Calculate the number of "=" to show in the progress bar
+  int barWidth = 50;  // Width of the progress bar in characters
+  int pos = barWidth * current / imax;
+
+  // Create the progress bar
+  std::string progressBar =
+      "[" + std::string(pos, '=') + std::string(barWidth - pos, ' ') + "]";
+
+  // Print the progress bar with the percentage
+  std::cout << "\r" << progressBar << " " << percent << "%";
+  std::cout.flush();  // Ensure the output is immediately printed
+}
+
+Eigen::Vector3f randomNormalVector3f(float mean, float stddev) {
+    // Initialize random number generator
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    if(stddev == 0.0f){
+      return Eigen::Vector3f::Zero();
+    }
+    else{
+      static std::normal_distribution<float> dist(mean, stddev);
+    
+      // Create and return Vector3f with random values
+      return Eigen::Vector3f(dist(gen), dist(gen), dist(gen));
+
+    }
 }
 
 vector<DroneState> simulation(const DroneState &x0, 
@@ -2618,6 +2656,7 @@ vector<DroneState> simulation(const DroneState &x0,
     float komega = param.komega;
     float M = param.M;
     float J = param.J;
+    VectorXf stds = param.stds;
     bool transient = true;
     int steady_index = 0;
 
@@ -2625,6 +2664,7 @@ vector<DroneState> simulation(const DroneState &x0,
     for (int i=0; i<N; i++)
     {
         //Get the states
+        printProgressBar(i, N);
 
         DroneState x = list_x[list_x.size()-1];
 
@@ -2635,6 +2675,27 @@ vector<DroneState> simulation(const DroneState &x0,
         omega = x.omega;
         u = x.u;
 
+        // Add measurement noise (normal distribution with zero mean and stddev sigma)
+        p += randomNormalVector3f(0.0f, stds(0));
+        // std::cout << "[DEBUG] measurement error: "<< print_vector(p - x.p) << std::endl;
+        Q *= expSO3(skew(randomNormalVector3f(0.0f, stds(1))));
+        Matrix3f Q_err = x.Q.transpose() * Q;
+        std::cout << "[DEBUG] orientation error: " << print_matrix(Q_err) << std::endl;
+        v += randomNormalVector3f(0.0f, stds(2));
+        omega += randomNormalVector3f(0.0f, stds(3));
+        Vector3f aux = randomNormalVector3f(0.0f, stds(4));
+        u(0) += aux(0);
+        u(1) += aux(1);
+        u(2) += aux(2);
+        aux = randomNormalVector3f(0.0f, stds(4));
+        u(3) += aux(0);
+        u(4) += aux(1);
+        u(5) += aux(2);
+        aux = randomNormalVector3f(0.0f, stds(5));
+        u(6) += aux(0);
+        u(7) += aux(1);
+        
+
         VectorXf xi(6);
         xi << v, omega;
 
@@ -2642,22 +2703,29 @@ vector<DroneState> simulation(const DroneState &x0,
 
         Matrix4d htm = to_htm(Q,p);
         Matrix4d htm_per = (expSE3(SmapSE3(xi.cast<double>() *dt))*htm);
+        Matrix4d htm_prev = (expSE3(SmapSE3(-xi.cast<double>() *dt))*htm);
         VectorFieldResult vfres = vectorfield_SE3(htm, curve, kt1, kt2, kt3, kn1, kn2, curve_derivative, delta, ds);
         VectorXf xi_d = vfres.twist;
-      std::cout << "[debug] dist: " << vfres.dist << std::endl;
+      // std::cout << "[debug] dist: " << vfres.dist << std::endl;
+        x.distance = vfres.dist;
+        x.nearest_index = vfres.index;
         VectorXf xi_d_per = vectorfield_SE3(htm_per, curve, kt1, kt2, kt3, kn1, kn2, curve_derivative, delta, ds).twist;
-        VectorXf dxi_d = (xi_d_per-xi_d)/(dt);
-        //
+        VectorXf xi_d_prev = vectorfield_SE3(htm_prev, curve, kt1, kt2, kt3, kn1, kn2, curve_derivative, delta, ds).twist;
+        // VectorXf dxi_d = (xi_d_per-xi_d)/(dt);
+        VectorXf dxi_d = (xi_d_per - xi_d_prev) / (2 * dt);
 
     if ((i * dt < 10.0f) && (i < 0.4 * N) && (transient)){
       xi_d = xi_d * 0.0;
       dxi_d = dxi_d * 0.0;
     }
     else {
-        transient = false;
+      if(transient){
         steady_index = i;
+      }
+        transient = false;
+        x.steady_index = steady_index;
     }
-    std::cout << "[DEBUG] XI - XID" << print_vector(xi - xi_d) << std::endl;
+    // std::cout << "[DEBUG] XI - XID" << print_vector(xi - xi_d) << std::endl;
         Vector3f F_d = M*Q.transpose()*( kv*(xi_d.head<3>() - v) + dxi_d.head<3>()  +  Eigen::Vector3f(0, 0, 9.8f))  ;
         Vector3f tau_d = J*Q.transpose()*( komega*(xi_d.tail<3>() - omega) + dxi_d.tail<3>())  ;
 
@@ -2666,17 +2734,22 @@ vector<DroneState> simulation(const DroneState &x0,
     // std::cout << "[DEBUG] DESIRED FORCE "<< print_vector(F_d) << std::endl;
     // std::cout << "[DEBUG] DESIRED TORQUE "<< print_vector(tau_d) << std::endl;
 
+        float fesc = 1;
+
         // VectorXf u_d = pinv_A*w_d;
-        MatrixXf H = 2 * A.transpose() * A + 1e-9 * MatrixXf::Identity(8, 8);
-        VectorXf f = -2 * A.transpose() * w_d;
+        MatrixXf H = pow(fesc, 2) * (2 * A.transpose() * A + 1e-9 * MatrixXf::Identity(8, 8));
+        VectorXf f = -2 * fesc * A.transpose() * w_d;
         MatrixXf A_ineq(16, 8);
+        
         A_ineq << -MatrixXf::Identity(8, 8),
                   MatrixXf::Identity(8, 8);
         VectorXf b_ineq(16);
         b_ineq << -param.u_max * VectorXf::Ones(8),
                   param.u_min * VectorXf::Ones(8);
+        b_ineq /= fesc;
         // // Solve the QP problem to find the optimal control inputs
         VectorXf u_d = solveQP(H, f, A_ineq, b_ineq);
+        u_d *= fesc;
       // std::cout << "[DEBUG] DESIRED INPUT "<< print_vector(u_d) << std::endl;
       // std::cout << "[DEBUG] Reconstruct err: " << print_vector(A * u_d - w_d) << std::endl;
 

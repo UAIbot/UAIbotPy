@@ -230,7 +230,10 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
         .def_readwrite("v", &DroneState::v)
         .def_readwrite("Q", &DroneState::Q)
         .def_readwrite("omega", &DroneState::omega)
-        .def_readwrite("u", &DroneState::u);
+        .def_readwrite("u", &DroneState::u)
+        .def_readwrite("distance", &DroneState::distance)
+        .def_readwrite("steady_index", &DroneState::steady_index)
+        .def_readwrite("nearest_index", &DroneState::nearest_index);
 
     py::class_<ParametersSim>(m, "CPP_ParametersSim")
         .def(py::init<>())
@@ -251,7 +254,8 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
         .def_readwrite("delta", &ParametersSim::delta)
         .def_readwrite("ds", &ParametersSim::ds)
         .def_readwrite("kv", &ParametersSim::kv)
-        .def_readwrite("komega", &ParametersSim::komega);
+        .def_readwrite("komega", &ParametersSim::komega)
+        .def_readwrite("stds", &ParametersSim::stds);
 
      m.def("vectorfield_rn", &vectorfield_rn, py::arg("q"), py::arg("q_path"), py::arg("alpha"), py::arg("const_velocity"), py::arg("is_closed"), py::arg("gamma"));
      m.def("dp_inv_solve", &dp_inv_solve, py::arg("A"), py::arg("b"), py::arg("eps"));
@@ -259,5 +263,9 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
            py::arg("kt3"), py::arg("kn1"), py::arg("kn2"), py::arg("curve_derivative")=std::vector<Eigen::MatrixXd>(),
            py::arg("delta") = c_delta, py::arg("ds")=c_ds);
      m.def("vant_simulation", &simulation, py::arg("x0"), py::arg("curve"), py::arg("curve_derivative"), py::arg("param"));
+    m.def("expSO3", &expSO3, py::arg("lie_alg"));
+    m.def("expSE3", &expSE3, py::arg("lie_alg"));
+    m.def("SmapSO3", &skew, py::arg("omega"));
+    m.def("SmapSE3", &SmapSE3, py::arg("xi"));
 
 }
