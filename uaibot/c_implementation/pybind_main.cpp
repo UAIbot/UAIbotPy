@@ -233,6 +233,11 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
         .def_readwrite("u", &DroneState::u)
         .def_readwrite("distance", &DroneState::distance)
         .def_readwrite("steady_index", &DroneState::steady_index)
+        .def_readwrite("xi_d", &DroneState::xi_d)
+        .def_readwrite("w_d", &DroneState::w_d)
+        .def_readwrite("u_d", &DroneState::u_d)
+        .def_readwrite("p_noisy", &DroneState::p_noisy)
+        .def_readwrite("Q_noisy", &DroneState::Q_noisy)
         .def_readwrite("nearest_index", &DroneState::nearest_index);
 
     py::class_<ParametersSim>(m, "CPP_ParametersSim")
@@ -262,10 +267,11 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
      m.def("vectorfield_SE3", &vectorfield_SE3, py::arg("state"), py::arg("curve"), py::arg("kt1"), py::arg("kt2"),
            py::arg("kt3"), py::arg("kn1"), py::arg("kn2"), py::arg("curve_derivative")=std::vector<Eigen::MatrixXd>(),
            py::arg("delta") = c_delta, py::arg("ds")=c_ds);
-     m.def("vant_simulation", &simulation, py::arg("x0"), py::arg("curve"), py::arg("curve_derivative"), py::arg("param"));
+     m.def("vant_simulation", &simulation, py::arg("x0"), py::arg("curve"), py::arg("curve_derivative"), py::arg("param"), py::arg("seed"));
     m.def("expSO3", &expSO3, py::arg("lie_alg"));
     m.def("expSE3", &expSE3, py::arg("lie_alg"));
     m.def("SmapSO3", &skew, py::arg("omega"));
     m.def("SmapSE3", &SmapSE3, py::arg("xi"));
+    m.def("ECdistance", &ECdistance, py::arg("state"), py::arg("curve"));
 
 }

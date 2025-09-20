@@ -360,6 +360,13 @@ struct DroneState
   float distance;
   int steady_index;
   int nearest_index;
+
+  // Other logs
+  VectorXf xi_d;
+  VectorXf w_d;
+  VectorXf u_d;
+  Vector3f p_noisy;
+  Matrix3f Q_noisy;
 };
 
 struct ParametersSim
@@ -466,9 +473,11 @@ VectorXf solveQP(const MatrixXf& H,const VectorXf& f,const MatrixXf& A,const Vec
 VectorFieldResult vectorfield_SE3(const Eigen::Matrix4d& state, const vector<Eigen::Matrix4d>& curve, float kt1, float kt2, float kt3, float kn1, float kn2,
     const vector<Eigen::MatrixXd>& curve_derivative=std::vector<Eigen::MatrixXd>(), double delta=c_delta, double ds=c_ds);
 
+std::tuple<double, int> ECdistance(const Eigen::MatrixXd& state, const vector<Eigen::Matrix4d>& curve);
+
 vector<DroneState> simulation(const DroneState &x0, 
     const vector<Eigen::Matrix4d> &curve, const vector<Eigen::MatrixXd> &curve_derivative, 
-    ParametersSim param);
+    ParametersSim param, int seed);
 
 Eigen::Matrix3f expSO3(const Eigen::Matrix3f A);
 Eigen::Matrix4d expSE3(const Eigen::Matrix4d X);

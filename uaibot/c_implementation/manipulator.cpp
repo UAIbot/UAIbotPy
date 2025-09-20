@@ -2417,7 +2417,7 @@ Eigen::Matrix3f expSO3(const Eigen::Matrix3f A){
   float theta = sqrt(pow(A(1, 0), 2) + pow(A(0, 2), 2) + pow(A(2, 1), 2));
   // If theta is close to zero, use the first order approximation
   if (theta < c_theta_zero) {
-    R = Eigen::Matrix3f::Identity();
+    R = Eigen::Matrix3f::Identity() + A;
   } 
   else {
     R = Eigen::Matrix3f::Identity() + (sin(theta) / theta) * A +
@@ -2576,8 +2576,10 @@ DroneState evolve_state(const DroneState& x, const Eigen::VectorXf& u_d, Paramet
 
     x_next.v     += dt * dv;
     x_next.omega += dt * domega;
+    float alpha = exp(-dt / tc);
     if(tc > 1e-6){
-      x_next.u     += dt * du;
+      // x_next.u     += dt * du;
+      x_next.u     = alpha * x.u + (1 - alpha) * u_d;
     }
     else {
       x_next.u = u_d;
@@ -2611,10 +2613,8 @@ void printProgressBar(int current, int imax) {
   std::cout.flush();  // Ensure the output is immediately printed
 }
 
-Eigen::Vector3f randomNormalVector3f(float mean, float stddev) {
+Eigen::Vector3f randomNormalVector3f(std::mt19937& gen, float mean, float stddev) {
     // Initialize random number generator
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
     if(stddev == 0.0f){
       return Eigen::Vector3f::Zero();
     }
@@ -2629,10 +2629,10 @@ Eigen::Vector3f randomNormalVector3f(float mean, float stddev) {
 
 vector<DroneState> simulation(const DroneState &x0, 
     const vector<Eigen::Matrix4d> &curve, const vector<Eigen::MatrixXd> &curve_derivative, 
-    ParametersSim param)
+    ParametersSim param, int seed)
 {
 
-    int N = (int) (param.sim_time/param.dt);
+    int imax = (int) (param.sim_time/param.dt);
 
     vector<DroneState> list_x;
 
@@ -2660,11 +2660,23 @@ vector<DroneState> simulation(const DroneState &x0,
     bool transient = true;
     int steady_index = 0;
 
+    static std::random_device rd;
+    // unsigned int seed = 42; // Fixed seed for reproducibility
+    static std::mt19937 gen(seed);
 
-    for (int i=0; i<N; i++)
+    int i = 0;
+    int total_curve_points = curve.size();
+    std::cout << "Total curve points: " << total_curve_points << std::endl;
+    // flags to ensure full traversal of the curve
+    bool on_curve = false; // true if system covnerged to the curve (last 30 samples have distance < 0.7)
+    int converge_idx = 0; // index of the first sample of the last 30 samples with distance < 0.7
+    bool full_traversal = false; // true if the system has fully traversed the curve
+    std::unordered_set<int> visited_indices;
+    // for (int i=0; i<N; i++)
+    while(i < imax && !full_traversal)
     {
         //Get the states
-        printProgressBar(i, N);
+        printProgressBar(i, imax);
 
         DroneState x = list_x[list_x.size()-1];
 
@@ -2676,25 +2688,35 @@ vector<DroneState> simulation(const DroneState &x0,
         u = x.u;
 
         // Add measurement noise (normal distribution with zero mean and stddev sigma)
-        p += randomNormalVector3f(0.0f, stds(0));
+        Vector3f p_noise = randomNormalVector3f(gen, 0.0f, stds(0));
+        p += p_noise;
+        x.p_noisy = p;
         // std::cout << "[DEBUG] measurement error: "<< print_vector(p - x.p) << std::endl;
-        Q *= expSO3(skew(randomNormalVector3f(0.0f, stds(1))));
-        Matrix3f Q_err = x.Q.transpose() * Q;
-        std::cout << "[DEBUG] orientation error: " << print_matrix(Q_err) << std::endl;
-        v += randomNormalVector3f(0.0f, stds(2));
-        omega += randomNormalVector3f(0.0f, stds(3));
-        Vector3f aux = randomNormalVector3f(0.0f, stds(4));
-        u(0) += aux(0);
-        u(1) += aux(1);
-        u(2) += aux(2);
-        aux = randomNormalVector3f(0.0f, stds(4));
-        u(3) += aux(0);
-        u(4) += aux(1);
-        u(5) += aux(2);
-        aux = randomNormalVector3f(0.0f, stds(5));
-        u(6) += aux(0);
-        u(7) += aux(1);
-        
+        // Q_noise = expSO3(skew(randomNormalVector3f(0.0f, stds(1))));
+        Eigen::Vector3f noise_angles = randomNormalVector3f(gen, 0.0f, stds(1));
+        Eigen::Matrix3f Q_noisex = expSO3(skew(Eigen::Vector3f(1, 0, 0) * noise_angles(0)));
+        Eigen::Matrix3f Q_noisey = expSO3(skew(Eigen::Vector3f(0, 1, 0) * noise_angles(1)));
+        Eigen::Matrix3f Q_noisez = expSO3(skew(Eigen::Vector3f(0, 0, 1) * noise_angles(2)));
+        Eigen::Matrix3f Q_noise = Q_noisex * Q_noisey * Q_noisez;
+        Q = Q * Q_noise;
+        // Eigen::Matrix3f Q_noise = Eigen::AngleAxisf(M_PI/4, Vector3f(1, 0, 0).normalized()).toRotationMatrix();
+        // Q = Q * Q_noise;
+        // Q = Q
+        x.Q_noisy = Q;
+        // v += randomNormalVector3f(gen, 0.0f, stds(2));
+        // omega += randomNormalVector3f(gen, 0.0f, stds(3));
+        // Vector3f aux = randomNormalVector3f(gen, 0.0f, stds(4));
+        // u(0) += aux(0);
+        // u(1) += aux(1);
+        // u(2) += aux(2);
+        // aux = randomNormalVector3f(0.0f, stds(4));
+        // u(3) += aux(0);
+        // u(4) += aux(1);
+        // u(5) += aux(2);
+        // aux = randomNormalVector3f(0.0f, stds(5));
+        // u(6) += aux(0);
+        // u(7) += aux(1);
+        //
 
         VectorXf xi(6);
         xi << v, omega;
@@ -2706,15 +2728,51 @@ vector<DroneState> simulation(const DroneState &x0,
         Matrix4d htm_prev = (expSE3(SmapSE3(-xi.cast<double>() *dt))*htm);
         VectorFieldResult vfres = vectorfield_SE3(htm, curve, kt1, kt2, kt3, kn1, kn2, curve_derivative, delta, ds);
         VectorXf xi_d = vfres.twist;
+        x.xi_d = xi_d;
       // std::cout << "[debug] dist: " << vfres.dist << std::endl;
         x.distance = vfres.dist;
         x.nearest_index = vfres.index;
+      if (!on_curve && list_x.size() >= 30) {
+              float sum_distances = 0.0f;
+              for (int j = list_x.size()-30; j < list_x.size(); j++) {
+                  sum_distances += list_x[j].distance;
+              }
+              float avg_distance = sum_distances / 30.0f;
+              
+              if (avg_distance < 0.7f) {
+                  on_curve = true;
+                  converge_idx = i; // Set only on first occurrence
+                  // Initialize visited indices with current point
+                  visited_indices.insert(x.nearest_index);
+              }
+          }
+        if (on_curve) {
+          // Add current nearest index to the set (automatically handles uniqueness)
+          visited_indices.insert(x.nearest_index);
+          
+          // Calculate coverage based on unique visited indices
+          float coverage_ratio = static_cast<float>(visited_indices.size()) / total_curve_points;
+          
+          // Additional check: ensure we're not just stationary
+          // Count how many of the last 50 samples are unique
+          std::unordered_set<int> recent_indices;
+          int recent_samples = std::min(50, static_cast<int>(list_x.size()));
+          for (int j = list_x.size() - recent_samples; j < list_x.size(); j++) {
+              recent_indices.insert(list_x[j].nearest_index);
+        }
+        
+        // If we've covered most of the curve AND we're still moving (multiple recent indices)
+        if (coverage_ratio >= 0.98f && recent_indices.size() > 1) {
+            std::cout << "Curve traversal completed! current time: " << i*dt << " seconds." << std::endl;
+            full_traversal = true;
+        }
+    }
         VectorXf xi_d_per = vectorfield_SE3(htm_per, curve, kt1, kt2, kt3, kn1, kn2, curve_derivative, delta, ds).twist;
         VectorXf xi_d_prev = vectorfield_SE3(htm_prev, curve, kt1, kt2, kt3, kn1, kn2, curve_derivative, delta, ds).twist;
         // VectorXf dxi_d = (xi_d_per-xi_d)/(dt);
         VectorXf dxi_d = (xi_d_per - xi_d_prev) / (2 * dt);
 
-    if ((i * dt < 10.0f) && (i < 0.4 * N) && (transient)){
+    if ((i * dt < 10.0f) && (i < 0.4 * imax) && (transient)){
       xi_d = xi_d * 0.0;
       dxi_d = dxi_d * 0.0;
     }
@@ -2731,6 +2789,7 @@ vector<DroneState> simulation(const DroneState &x0,
 
         VectorXf w_d(6);
         w_d << F_d, tau_d;
+        x.w_d = w_d;
     // std::cout << "[DEBUG] DESIRED FORCE "<< print_vector(F_d) << std::endl;
     // std::cout << "[DEBUG] DESIRED TORQUE "<< print_vector(tau_d) << std::endl;
 
@@ -2750,12 +2809,14 @@ vector<DroneState> simulation(const DroneState &x0,
         // // Solve the QP problem to find the optimal control inputs
         VectorXf u_d = solveQP(H, f, A_ineq, b_ineq);
         u_d *= fesc;
+        x.u_d = u_d;
       // std::cout << "[DEBUG] DESIRED INPUT "<< print_vector(u_d) << std::endl;
       // std::cout << "[DEBUG] Reconstruct err: " << print_vector(A * u_d - w_d) << std::endl;
 
         DroneState next_x = evolve_state(x, u_d, param);
 
         list_x.push_back(next_x);
+        i++;
 
     }
 
