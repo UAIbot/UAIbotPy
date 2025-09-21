@@ -2619,7 +2619,7 @@ Eigen::Vector3f randomNormalVector3f(std::mt19937& gen, float mean, float stddev
       return Eigen::Vector3f::Zero();
     }
     else{
-      static std::normal_distribution<float> dist(mean, stddev);
+      std::normal_distribution<float> dist(mean, stddev);
     
       // Create and return Vector3f with random values
       return Eigen::Vector3f(dist(gen), dist(gen), dist(gen));
