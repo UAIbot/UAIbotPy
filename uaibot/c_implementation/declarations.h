@@ -367,6 +367,10 @@ struct DroneState
   VectorXf u_d;
   Vector3f p_noisy;
   Matrix3f Q_noisy;
+  float true_distance;
+  float true_pos_error;
+  float true_angle_error;
+  int true_nearest_index;
 };
 
 struct ParametersSim

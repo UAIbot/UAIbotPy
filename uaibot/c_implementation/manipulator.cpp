@@ -2510,6 +2510,30 @@ VectorFieldResult vectorfield_SE3(const Eigen::Matrix4d& state, const vector<Eig
   return vfr;
 }
 
+std::tuple<float, float, float, int> computeTrueErrors(const Eigen::Matrix4d& state, const vector<Eigen::Matrix4d>& curve) {
+  std::tuple<double, int> res_ = ECdistance(state, curve);
+  double min_distance;
+  int closest_index;
+  std::tie(min_distance, closest_index) = res_;
+  Eigen::Matrix4d closest_point = curve.at(closest_index);
+  
+  // Compute position error
+  Eigen::Vector3d p_current = state.block<3, 1>(0, 3);
+  Eigen::Vector3d p_desired = closest_point.block<3, 1>(0, 3);
+  float pos_error = (p_current - p_desired).norm();
+  // Compute orientation error
+  Eigen::Matrix3d R_current = state.block<3, 3>(0, 0);
+  Eigen::Matrix3d R_desired = closest_point.block<3, 3>(0, 0);
+  Eigen::Matrix3d R_err = R_desired * R_current.transpose();
+  // Compute arccos argument accounting for possible numerical issues
+  float cos_angle = (R_err.trace() - 1) / 2.0;
+  cos_angle = std::min(1.0f, std::max(-1.0f, cos_angle));
+  float angle_error = acos(cos_angle);
+  // Recast distance as float
+  return std::make_tuple(static_cast<float>(min_distance), pos_error, angle_error, closest_index);
+}
+
+  
 // -----------------------------------------------------------------------------
 // ------------------------- VECTOR FIELD ON SE(3) END -------------------------
 // -----------------------------------------------------------------------------
@@ -2732,6 +2756,15 @@ vector<DroneState> simulation(const DroneState &x0,
       // std::cout << "[debug] dist: " << vfres.dist << std::endl;
         x.distance = vfres.dist;
         x.nearest_index = vfres.index;
+    // Compute true errors
+        float true_dist, pos_error, angle_error;
+        int closest_index;
+        Matrix4d true_htm = to_htm(x.Q, x.p);
+        std::tie(true_dist, pos_error, angle_error, closest_index) = computeTrueErrors(true_htm, curve);
+        x.true_distance = true_dist;
+        x.true_pos_error = pos_error;
+        x.true_angle_error = angle_error;
+        x.true_nearest_index = closest_index;
       if (!on_curve && list_x.size() >= 30) {
               float sum_distances = 0.0f;
               for (int j = list_x.size()-30; j < list_x.size(); j++) {
