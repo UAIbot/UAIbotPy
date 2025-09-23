@@ -2696,6 +2696,13 @@ vector<DroneState> simulation(const DroneState &x0,
     int converge_idx = 0; // index of the first sample of the last 30 samples with distance < 0.7
     bool full_traversal = false; // true if the system has fully traversed the curve
     std::unordered_set<int> visited_indices;
+    // Brownian noise parameters
+    float t_w = 0.1f;
+    float alpha_brown = exp(-dt/t_w);
+    Eigen::Vector3f p_noise0 = randomNormalVector3f(gen, 0.0f, stds(0));
+    Eigen::Vector3f noise_angles0 = randomNormalVector3f(gen, 0.0f, stds(1));
+    Eigen::Vector3f p_noise = p_noise0;
+    Eigen::Vector3f noise_angles = noise_angles0;
     // for (int i=0; i<N; i++)
     while(i < imax && !full_traversal)
     {
@@ -2712,12 +2719,13 @@ vector<DroneState> simulation(const DroneState &x0,
         u = x.u;
 
         // Add measurement noise (normal distribution with zero mean and stddev sigma)
-        Vector3f p_noise = randomNormalVector3f(gen, 0.0f, stds(0));
+        // Vector3f p_noise = randomNormalVector3f(gen, 0.0f, stds(0));
         p += p_noise;
         x.p_noisy = p;
         // std::cout << "[DEBUG] measurement error: "<< print_vector(p - x.p) << std::endl;
         // Q_noise = expSO3(skew(randomNormalVector3f(0.0f, stds(1))));
-        Eigen::Vector3f noise_angles = randomNormalVector3f(gen, 0.0f, stds(1));
+    //
+        // Eigen::Vector3f noise_angles = randomNormalVector3f(gen, 0.0f, stds(1));
         Eigen::Matrix3f Q_noisex = expSO3(skew(Eigen::Vector3f(1, 0, 0) * noise_angles(0)));
         Eigen::Matrix3f Q_noisey = expSO3(skew(Eigen::Vector3f(0, 1, 0) * noise_angles(1)));
         Eigen::Matrix3f Q_noisez = expSO3(skew(Eigen::Vector3f(0, 0, 1) * noise_angles(2)));
@@ -2847,6 +2855,8 @@ vector<DroneState> simulation(const DroneState &x0,
       // std::cout << "[DEBUG] Reconstruct err: " << print_vector(A * u_d - w_d) << std::endl;
 
         DroneState next_x = evolve_state(x, u_d, param);
+        p_noise = alpha_brown * p_noise + sqrt(1 - (alpha_brown * alpha_brown)) * randomNormalVector3f(gen, 0.0f, stds(0));
+        noise_angles = alpha_brown * noise_angles + sqrt(1 - (alpha_brown * alpha_brown)) * randomNormalVector3f(gen, 0.0f, stds(1));
 
         list_x.push_back(next_x);
         i++;
