@@ -311,6 +311,12 @@ struct Manipulator
     vector<vector<Vector3f>> coord_tube;
     vector<vector<GeometricPrimitives>> geo_prim;
 
+  // Inertial parameters
+    vector<float> masses;
+    vector<Matrix3f> inertia_tensors;
+    vector<Vector3f> com_positions;
+    Vector3f gravity_vec = Vector3f(0, 0, -9.81);
+
     float tube_radius;
 
     // Constructors
@@ -320,6 +326,7 @@ struct Manipulator
     // String
     string toString() const;
     void set_joint_param(int ind_link, float _theta, float _d, float _alpha, float _a, int _joint_type, float _q_min, float _q_max);
+    void set_inertial_param(int ind_link, float _mass, Vector3f _com, Matrix3f _inertia, bool wrt_dh=false);
     void add_tube_coord(int ind_link, Vector3f coord);
     void add_geo_prim(int ind_link, GeometricPrimitives prim);
     void set_htm_extra(Matrix4f _htm_world_to_dh0, Matrix4f _htm_dhn_to_ee);
@@ -346,6 +353,10 @@ struct Manipulator
 
     DistStructRobotAuto compute_dist_auto(VectorXf q, DistStructRobotAuto old_dist_struct,
                                                 float tol, int no_iter_max, float max_dist, float h, float eps) const;
+
+    std::tuple<MatrixXf, VectorXf, VectorXf> getDynamicModel(const VectorXf &_q, const VectorXf &_qp) const;
+    VectorXf newtonEuler(const VectorXf &q, const VectorXf &qdot,
+                      const VectorXf &qddot) const;
 
 };
 
@@ -419,3 +430,18 @@ VectorXf solveQP(const MatrixXf& H,const VectorXf& f,const MatrixXf& A,const Vec
 
 VectorFieldResult vectorfield_SE3(const Eigen::Matrix4d& state, const vector<Eigen::Matrix4d>& curve, float kt1, float kt2, float kt3, float kn1, float kn2,
     const vector<Eigen::MatrixXd>& curve_derivative=std::vector<Eigen::MatrixXd>(), double delta=c_delta, double ds=c_ds);
+
+Eigen::Matrix4d expSE3(const Eigen::Matrix4d X);
+
+Eigen::Matrix4d SmapSE3(const Eigen::VectorXd xi);
+
+Eigen::VectorXd invSmapSE3(const Eigen::Matrix4d A);
+
+VectorXf recursiveNewtonEuler(const VectorXf &q, const VectorXf &qdot,
+                      const VectorXf &qddot, const Vector3f &g0,
+                      const Manipulator &robot);
+
+std::tuple<MatrixXf, VectorXf, VectorXf>
+getEulerLagrangeMatrices(const VectorXf &_q, const VectorXf &_qp,
+                         const Vector3f &_g0, const Manipulator &robot);
+

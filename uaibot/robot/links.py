@@ -83,11 +83,27 @@ class Link:
         """If the Denavit-Hartenberg frame of the link is displayed in simulation."""
         return self._show_frame
 
+    @property
+    def mass(self):
+        """The mass of the link (in kg)."""
+        return self._mass
+
+    @property
+    def center_of_mass(self):
+        """The center of mass of the link (in meters)."""
+        return self._center_of_mass
+
+    @property
+    def inertia_tensor(self):
+        """The inertia tensor of the link (in kg.m^2)."""
+        return self._inertia_tensor
+
     #######################################
     # Constructor
     #######################################
 
-    def __init__(self, joint_number, theta, d, alpha, a, joint_type, list_model_3d, show_frame=False):
+    def __init__(self, joint_number, theta, d, alpha, a, joint_type, list_model_3d, show_frame=False,
+                    mass=0.0, center_of_mass=np.zeros(3), inertia_tensor=np.zeros((3, 3))):
 
         # Error handling
         if str(type(joint_number)) != "<class 'int'>" or joint_number < 0:
@@ -129,6 +145,9 @@ class Link:
         self._col_objects = []
         self._list_model_3d = list_model_3d
         self._show_frame = show_frame
+        self._mass = mass
+        self._center_of_mass = np.array(center_of_mass).ravel()
+        self._inertia_tensor = np.array(inertia_tensor)
 
     #######################################
     # Std. Print

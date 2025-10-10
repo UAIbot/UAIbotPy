@@ -1695,6 +1695,63 @@ void Manipulator::set_joint_param(int ind_link, float _theta, float _d, float _a
     q_max[ind_link] = _q_max;
 }
 
+void Manipulator::set_inertial_param(int ind_link, float _mass, Vector3f _com, Matrix3f _inertia, bool wrt_dh)
+{
+  /* Set the inertial parameters of a link.
+    * ind_link: index of the link (0 to no_links-1)
+    * _mass: mass of the link (kg)
+    * _com: center of mass of the link expressed in the DH frame (m)
+    * _inertia: inertia matrix of the link expressed in the (COM or DH) frame (kg*m^2)
+    * wrt_dh: if true, the inertia is expressed wrt the DH frame; if false, the inertia is expressed wrt the center of mass
+  */
+    if (ind_link < 0 || ind_link >= no_links)
+        throw std::runtime_error("The link index should be between 0 and " + std::to_string(no_links - 1) + "!");
+
+    if (_mass <= 0)
+        throw std::runtime_error("The mass should be strictly positive!");
+
+    masses[ind_link] = _mass;
+    com_positions[ind_link] = _com;
+    if (wrt_dh)
+  {
+    // Parallel axis theorem to express inertia wrt COM frame
+    Matrix3f com_skew = s_mat(_com);
+    inertia_tensors[ind_link] = _inertia + _mass * com_skew * com_skew;
+  }
+  else{
+    inertia_tensors[ind_link] = _inertia;
+  }
+}
+  std::tuple<MatrixXf, VectorXf, VectorXf> Manipulator::getDynamicModel(const VectorXf &_q, const VectorXf &_qp) const {
+
+  if (_q.rows() != no_links){
+        throw std::runtime_error("The configuration vector q should have " + std::to_string(no_links) + " rows!");
+  }
+
+  if (_qp.rows() != no_links){
+        throw std::runtime_error("The velocity vector qp should have " + std::to_string(no_links) + " rows!");
+  }
+
+  return getEulerLagrangeMatrices(_q, _qp, gravity_vec, *this);
+}
+
+VectorXf Manipulator::newtonEuler(const VectorXf &q, const VectorXf &qdot,
+                      const VectorXf &qddot) const {
+  if (q.rows() != no_links){
+        throw std::runtime_error("The configuration vector q should have " + std::to_string
+(no_links) + " rows!");
+  }
+
+  if (qdot.rows() != no_links){
+        throw std::runtime_error("The velocity vector qdot should have " + std::to_string(no_links) + " rows!");
+  }
+  if (qddot.rows() != no_links){
+        throw std::runtime_error("The acceleration vector qddot should have " + std::to_string(no_links) + " rows!");
+  }
+  return recursiveNewtonEuler(q, qdot, qddot, gravity_vec, *this);
+}
+
+
 void Manipulator::add_tube_coord(int ind_link, Vector3f coord)
 {
     if (ind_link < 0 || ind_link >= no_links)

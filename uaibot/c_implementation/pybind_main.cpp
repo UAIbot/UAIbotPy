@@ -220,6 +220,17 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
          .def("compute_dist_auto",
               static_cast<DistStructRobotAuto (Manipulator::*)(VectorXf, DistStructRobotAuto, float, int, float, float, float) const>(&Manipulator::compute_dist_auto),
               py::arg("q"), py::arg("old_dist_struct"), py::arg("tol"), py::arg("no_iter_max"), py::arg("max_dist"), py::arg("h"), py::arg("eps"))
+          .def("set_inertial_param",
+               (void(Manipulator::*)(int, float, Matrix3f, Vector3f, bool)) & Manipulator::set_inertial_param,
+               py::arg("ind_link"), py::arg("mass"),py::arg("com_position"), py::arg("inertia_tensor"),  py::arg("wrt_dh")=false)
+          .def("newtonEuler", &Manipulator::newtonEuler,
+                py::arg("q"), py::arg("q_dot"), py::arg("q_ddot"))
+          .def("getEulerLagrangeMatrices", &Manipulator::getDynamicModel,
+                py::arg("q"), py::arg("q_dot"))
+          .def_readwrite("gravity_vector", &Manipulator::gravity_vec)
+          .def_readonly("masses", &Manipulator::masses)
+          .def_readonly("inertia_tensors", &Manipulator::inertia_tensors)
+          .def_readonly("com_positions", &Manipulator::com_positions)
 
          .def("__str__", &Manipulator::toString)
          .def("__repr__", &Manipulator::toString);

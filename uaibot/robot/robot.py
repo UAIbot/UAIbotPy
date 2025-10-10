@@ -191,6 +191,18 @@ class Robot:
         """Used in the c++ interface"""
         return self._cpp_robot
     
+    @property
+    def gravity_vector(self):
+        """The gravity vector used in the dynamic model of the robot"""
+        return self._gravity_vector
+
+    @gravity_vector.setter
+    def gravity_vector(self, vector):
+        if not Utils.is_a_vector(vector, 3):
+            raise Exception("The parameter 'vector' should be a 3D vector.")
+        self._gravity_vector = np.array(vector).reshape((3,1))
+        if os.environ['CPP_SO_FOUND']=="1":
+            self._cpp_robot.gravity_vector = self._gravity_vector
     #######################################
     # Constructor
     #######################################
@@ -269,6 +281,7 @@ class Robot:
         self._htm_base_0 = htm_base_0
         self._htm_n_eef = htm_n_eef
         self._eef_frame_visible = eef_frame_visible
+        self._gravity_vector = np.array([0,0,-9.81]).reshape((3,1))
 
         
         if eef_frame_visible:
@@ -573,6 +586,56 @@ class Robot:
     """
         return _jac_jac_geo(self, q, axis, htm)
 
+    def newton_euler(self, q: Optional[Vector] = None, qdot: Optional[Vector] = None, qddot: Optional[Vector] = None) -> Vector:
+        """Returns the wrench vector (forces and torques) at the
+        effector. Computed using the Newton-Euler algorithm.
+        Parameters
+        ----------
+        q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped
+            numpy matrix/numpy array). The manipulator's joint configuration
+            (default: the current  joint configuration (robot.q) for the manipulator).
+        qdot : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+            The manipulator's joint velocities
+            (default: zero vector).
+        qddot : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+            The manipulator's joint accelerations
+            (default: zero vector).
+
+        Returns
+        -------
+        wrench : 6 x 1 numpy array
+            The wrench at the end-effector, as a 6 x 1 numpy array.
+            The first three entries are forces, and the last three
+            entries are torques.
+        """
+        return self.cpp_robot.newtonEuler(q, qdot, qddot)
+
+    def get_euler_lagrange_matrices(self, q: Optional[Vector] = None, qdot: Optional[Vector] = None) -> Tuple[np.array, np.array, np.array]:
+        """Returns the matrices of the dynamic model of the robot, in the
+        Euler-Lagrange formulation:
+
+        M(q)qddot + C(q,qdot)qdot + g(q) = w
+                   |==C_(q,qdot)=|
+
+        Parameters
+        ----------
+        q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped
+            numpy matrix/numpy array). The manipulator's joint configuration
+            (default: the current  joint configuration (robot.q) for the manipulator).
+        qdot : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+            The manipulator's joint velocities
+            (default: zero vector).
+
+        Returns
+        -------
+        M : n x n numpy array
+            The inertia matrix.
+        C_ : n x n numpy array
+            The Coriolis and centripetal matrix multiplied by qdot.
+        g : n x 1 numpy array
+            The gravity vector.
+        """
+        return self.cpp_robot.getEulerLagrangeMatrices(q, qdot)
     #######################################
     # Methods for control
     #######################################
