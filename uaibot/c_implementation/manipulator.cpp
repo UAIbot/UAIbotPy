@@ -2704,7 +2704,8 @@ vector<DroneState> simulation(const DroneState &x0,
     Eigen::Vector3f p_noise = p_noise0;
     Eigen::Vector3f noise_angles = noise_angles0;
     // for (int i=0; i<N; i++)
-    while(i < imax && !full_traversal)
+    // while(i < imax && !full_traversal)
+    while(i < imax)
     {
         //Get the states
         printProgressBar(i, imax);
@@ -2824,6 +2825,7 @@ vector<DroneState> simulation(const DroneState &x0,
         transient = false;
         x.steady_index = steady_index;
     }
+    x.traversed = full_traversal;
     // std::cout << "[DEBUG] XI - XID" << print_vector(xi - xi_d) << std::endl;
         Vector3f F_d = M*Q.transpose()*( kv*(xi_d.head<3>() - v) + dxi_d.head<3>()  +  Eigen::Vector3f(0, 0, 9.8f))  ;
         Vector3f tau_d = J*Q.transpose()*( komega*(xi_d.tail<3>() - omega) + dxi_d.tail<3>())  ;
@@ -2862,6 +2864,7 @@ vector<DroneState> simulation(const DroneState &x0,
         i++;
 
     }
+  std::cout << "Full traversal? " << (full_traversal ? "Yes" : "No") << std::endl;
 
  // return list_x from steady_index to the end
   return list_x;

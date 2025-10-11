@@ -371,6 +371,7 @@ struct DroneState
   float true_pos_error;
   float true_angle_error;
   int true_nearest_index;
+  bool traversed;
 };
 
 struct ParametersSim

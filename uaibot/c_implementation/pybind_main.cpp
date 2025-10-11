@@ -242,6 +242,7 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
         .def_readwrite("true_pos_error", &DroneState::true_pos_error)
         .def_readwrite("true_angle_error", &DroneState::true_angle_error)
         .def_readwrite("true_nearest_index", &DroneState::true_nearest_index)
+        .def_readwrite("traversed", &DroneState::traversed)
         .def_readwrite("nearest_index", &DroneState::nearest_index);
 
     py::class_<ParametersSim>(m, "CPP_ParametersSim")
