@@ -94,16 +94,39 @@ class Link:
         return self._center_of_mass
 
     @property
+    def com_coordinates(self):
+        """The center of mass of the link as a 3x1 numpy matrix (in meters)."""
+        return np.matrix(self._center_of_mass.copy().reshape((3, 1)))
+
+    @property
     def inertia_tensor(self):
         """The inertia tensor of the link (in kg.m^2)."""
         return self._inertia_tensor
+
+    @property
+    def inertia_matrix(self):
+        """The inertia tensor of the link as a 3x3 numpy matrix wrt DH
+        frame (in kg.m^2).
+        """
+        if self.wrt_dh:
+            return np.matrix(self.inertia_tensor)
+        else:
+            I_dh = self.inertia_tensor - self.mass * Utils.S(self.center_of_mass) @ Utils.S(self.center_of_mass)
+            return np.matrix(I_dh)
+
+    @property
+    def wrt_dh(self):
+        """If the inertia tensor is given about the DH frame (True) or
+        about the center of mass (False).
+        """
+        return self._wrt_dh
 
     #######################################
     # Constructor
     #######################################
 
     def __init__(self, joint_number, theta, d, alpha, a, joint_type, list_model_3d, show_frame=False,
-                    mass=0.0, center_of_mass=np.zeros(3), inertia_tensor=np.zeros((3, 3))):
+                    mass=0.0, center_of_mass=np.zeros(3), inertia_tensor=np.zeros((3, 3)), wrt_dh=False):
 
         # Error handling
         if str(type(joint_number)) != "<class 'int'>" or joint_number < 0:
@@ -148,6 +171,7 @@ class Link:
         self._mass = mass
         self._center_of_mass = np.array(center_of_mass).ravel()
         self._inertia_tensor = np.array(inertia_tensor)
+        self._wrt_dh = wrt_dh
 
     #######################################
     # Std. Print

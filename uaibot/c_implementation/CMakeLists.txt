@@ -53,6 +53,7 @@ set(SOURCES
     pybind_main.cpp   
     manipulator.cpp  
     utils.cpp  
+    newton_euler.cpp
     declarations.h  
     gjk.c         
     gjk.h

@@ -272,10 +272,10 @@ def _create_kinova_gen3(
         inertia_map(0.000587, 0.000003, 0.000003, 0.000369, 0.000118, 0.000609),
     ]
     # Map inertia matrices do DHT frames using Steiner's theorem:
-    list_inertia_mat = [
-        M - (list_mass[i] * Utils.S(list_com[i]) @ Utils.S(list_com[i]))
-        for i, M in enumerate(list_inertia_mat_)
-    ]
+    # list_inertia_mat = [
+    #     M - (list_mass[i] * Utils.S(list_com[i]) @ Utils.S(list_com[i]))
+    #     for i, M in enumerate(list_inertia_mat_)
+    # ]
 
     ## Collision models
     col_model = [[], [], [], [], [], [], []]
@@ -452,6 +452,10 @@ def _create_kinova_gen3(
                 a=link_info[3][i],
                 joint_type=link_info[4][i],
                 list_model_3d=link_3d_obj[i],
+                mass=list_mass[i],
+                center_of_mass=list_com[i],
+                inertia_tensor=list_inertia_mat_[i],
+                wrt_dh=False,
                 # com_coordinates=list_com[i], # DEPRECATED PARAMETERS IN UAIBOT>=1.2.2
                 # mass=list_mass[i],
                 # inertia_matrix=list_inertia_mat[i],

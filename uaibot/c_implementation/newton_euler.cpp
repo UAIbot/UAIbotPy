@@ -1,8 +1,8 @@
 // ne_newton_euler.cpp
-#include <eigen3/Eigen/Dense>
+// #include <eigen3/Eigen/Dense>
+#include "declarations.h"
 #include <iostream>
 #include <vector>
-#include "declarations.h"
 // #include <Eigen/Dense>
 
 using Eigen::Matrix3f;
@@ -20,8 +20,8 @@ Matrix3f create_inertia(double Ixx, double Ixy, double Ixz, double Iyy,
 
 // --- Newton-Euler implementation (translated) ---
 VectorXf recursiveNewtonEuler(const VectorXf &q, const VectorXf &qdot,
-                      const VectorXf &qddot, const Vector3f &g0,
-                      const Manipulator &robot) {
+                              const VectorXf &qddot, const Vector3f &g0,
+                              const Manipulator &robot) {
   const size_t n = q.size();
   // Ensure robot.links has at least n entries
   if (robot.no_links != n) {
@@ -34,9 +34,9 @@ VectorXf recursiveNewtonEuler(const VectorXf &q, const VectorXf &qdot,
 
   // masses and inertias — prefer reading from robot, fall back to Get... for
   // demo
-  std::vector<float> m = Manipulator.masses;
-  std::vector<Matrix3f> I = Manipulator.inertia_tensors;
-  std::vector<Vector3f> r_cms = Manipulator.com_positions;
+  std::vector<float> m = robot.masses;
+  std::vector<Matrix3f> I = robot.inertia_tensors;
+  std::vector<Vector3f> r_cms = robot.com_positions;
   // allocate
   MatrixXf w_i = MatrixXf::Zero(3, n);
   MatrixXf wp_i = MatrixXf::Zero(3, n);
@@ -86,13 +86,17 @@ VectorXf recursiveNewtonEuler(const VectorXf &q, const VectorXf &qdot,
 
     // a_i[:, i] = R_i_im1 * a_i0 + cross(wp_i[:,i], r_i_im1_i[:,i]) +
     // cross(w_i[:,i], cross(w_i[:,i], r_i_im1_i[:,i]))
-    Vector3f ai = R_i_im1 * a_i0 + wp_i.col(i).cross(r_i_im1_i.col(i)) +
-                  w_i.col(i).cross(w_i.col(i).cross(r_i_im1_i.col(i)));
+    Vector3f w_i_col_i = w_i.col(i);
+    Vector3f r_i_im1_i_col_i = r_i_im1_i.col(i);
+    Vector3f wp_i_col_i = wp_i.col(i);
+    Vector3f ai = R_i_im1 * a_i0 + wp_i_col_i.cross(r_i_im1_i_col_i) +
+                  w_i_col_i.cross(w_i_col_i.cross(r_i_im1_i_col_i));
     a_i.col(i) = ai;
 
     // a_ci
-    Vector3f aci = a_i.col(i) + wp_i.col(i).cross(r_i_i_cmi.col(i)) +
-                   w_i.col(i).cross(w_i.col(i).cross(r_i_i_cmi.col(i)));
+    Vector3f r_i_i_cmi_col_i = r_i_i_cmi.col(i);
+    Vector3f aci = a_i.col(i) + wp_i_col_i.cross(r_i_i_cmi_col_i) +
+                   w_i_col_i.cross(w_i_col_i.cross(r_i_i_cmi_col_i));
     a_ci.col(i) = aci;
 
     // update for next iteration
@@ -110,23 +114,28 @@ VectorXf recursiveNewtonEuler(const VectorXf &q, const VectorXf &qdot,
     // gi = T[i][:3,:3].T @ g0
     Vector3f gi = T[idx].block<3, 3>(0, 0).transpose() * g0;
     Vector3f aci_i = a_ci.col(idx);
-
+    Vector3f r_i_i_cmi_col_i = r_i_i_cmi.col(idx);
+    Vector3f r_i_im1_i_col_i = r_i_im1_i.col(idx);
+    Vector3f w_i_col_i = w_i.col(idx);
     if (idx == (int)n - 1) {
       f_i.col(idx) = m[idx] * (aci_i - gi);
+      Vector3f wp_i_col_i = wp_i.col(idx);
+      Vector3f f_i_col_i = f_i.col(idx);
       tau_i.col(idx) =
-          (-f_i.col(idx)).cross(r_i_im1_i.col(idx) + r_i_i_cmi.col(idx)) +
-          I[idx] * wp_i.col(idx) + w_i.col(idx).cross(I[idx] * w_i.col(idx));
+          (-f_i_col_i).cross(r_i_im1_i_col_i + r_i_i_cmi_col_i) +
+          I[idx] * wp_i.col(idx) + w_i_col_i.cross(I[idx] * w_i_col_i);
     } else {
       Matrix3f R_i_ip1 =
           T[idx].block<3, 3>(0, 0).transpose() * T[idx + 1].block<3, 3>(0, 0);
       f_i.col(idx) = R_i_ip1 * f_i.col(idx + 1) + m[idx] * (aci_i - gi);
 
+      Vector3f f_i_col_i = f_i.col(idx);
       Vector3f tau_init =
-          (-f_i.col(idx)).cross(r_i_im1_i.col(idx) + r_i_i_cmi.col(idx)) +
-          I[idx] * wp_i.col(idx) + w_i.col(idx).cross(I[idx] * w_i.col(idx));
+          (-f_i_col_i).cross(r_i_im1_i_col_i + r_i_i_cmi_col_i) +
+          I[idx] * wp_i.col(idx) + w_i_col_i.cross(I[idx] * w_i_col_i);
 
       tau_i.col(idx) = R_i_ip1 * tau_i.col(idx + 1) +
-                       (R_i_ip1 * f_i.col(idx + 1)).cross(r_i_i_cmi.col(idx)) +
+                       (R_i_ip1 * f_i.col(idx + 1)).cross(r_i_i_cmi_col_i) +
                        tau_init;
     }
 
@@ -153,9 +162,11 @@ getEulerLagrangeMatrices(const VectorXf &_q, const VectorXf &_qp,
                          const Vector3f &_g0, const Manipulator &robot) {
   size_t n = _q.size();
   // Gravity vector
-  VectorXf G_out = recursiveNewtonEuler(_q, VectorXf::Zero(n), VectorXf::Zero(n), _g0, robot);
+  VectorXf G_out = recursiveNewtonEuler(_q, VectorXf::Zero(n),
+                                        VectorXf::Zero(n), _g0, robot);
   // Coriolis
-  VectorXf Cqp_out = recursiveNewtonEuler(_q, _qp, VectorXf::Zero(n), Vector3f::Zero(), robot);
+  VectorXf Cqp_out =
+      recursiveNewtonEuler(_q, _qp, VectorXf::Zero(n), Vector3f::Zero(), robot);
 
   // Inertia matrix M: columns computed by Newton_Euler with qpp = unit basis
   MatrixXf M_out = MatrixXf::Zero(n, n);

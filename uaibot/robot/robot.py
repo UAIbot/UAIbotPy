@@ -281,7 +281,7 @@ class Robot:
         self._htm_base_0 = htm_base_0
         self._htm_n_eef = htm_n_eef
         self._eef_frame_visible = eef_frame_visible
-        self._gravity_vector = np.array([0,0,-9.81]).reshape((3,1))
+        self._gravity_vector = np.array([0, 0, -9.81]).reshape((3,1))
 
         
         if eef_frame_visible:
@@ -591,13 +591,13 @@ class Robot:
         effector. Computed using the Newton-Euler algorithm.
         Parameters
         ----------
-        q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped
-            numpy matrix/numpy array). The manipulator's joint configuration
-            (default: the current  joint configuration (robot.q) for the manipulator).
-        qdot : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+        q : np.array
+            The manipulator configuration.
+            (default: the current  joint configuration for the manipulator).
+        qdot : np.array
             The manipulator's joint velocities
             (default: zero vector).
-        qddot : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+        qddot : np.array
             The manipulator's joint accelerations
             (default: zero vector).
 
@@ -608,9 +608,15 @@ class Robot:
             The first three entries are forces, and the last three
             entries are torques.
         """
+        if q is None:
+            q = self.q.copy()
+        if qdot is None:
+            qdot = np.zeros((len(self.links), 1))
+        if qddot is None:
+            qddot = np.zeros((len(self.links), 1))
         return self.cpp_robot.newtonEuler(q, qdot, qddot)
 
-    def get_euler_lagrange_matrices(self, q: Optional[Vector] = None, qdot: Optional[Vector] = None) -> Tuple[np.array, np.array, np.array]:
+    def dynamic_model(self, q: Optional[Vector] = None, qdot: Optional[Vector] = None) -> Tuple[np.array, np.array, np.array]:
         """Returns the matrices of the dynamic model of the robot, in the
         Euler-Lagrange formulation:
 
@@ -619,10 +625,10 @@ class Robot:
 
         Parameters
         ----------
-        q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped
-            numpy matrix/numpy array). The manipulator's joint configuration
-            (default: the current  joint configuration (robot.q) for the manipulator).
-        qdot : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+        q : np.array
+            The manipulator configuration.
+            (default: the current  joint configuration for the manipulator).
+        qdot : np.array
             The manipulator's joint velocities
             (default: zero vector).
 
@@ -630,12 +636,20 @@ class Robot:
         -------
         M : n x n numpy array
             The inertia matrix.
-        C_ : n x n numpy array
+        C_ : n x 1 numpy array
             The Coriolis and centripetal matrix multiplied by qdot.
         g : n x 1 numpy array
             The gravity vector.
         """
-        return self.cpp_robot.getEulerLagrangeMatrices(q, qdot)
+        if q is None:
+            q = self.q.copy()
+        if qdot is None:
+            qdot = np.zeros((len(self.links), 1))
+        M, C_, g = self.cpp_robot.getEulerLagrangeMatrices(q, qdot)
+        M = np.array(M)
+        C_ = np.array(C_).reshape(-1, 1)
+        g = np.array(g).reshape(-1, 1)
+        return M, C_, g
     #######################################
     # Methods for control
     #######################################

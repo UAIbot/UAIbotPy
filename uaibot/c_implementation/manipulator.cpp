@@ -1654,6 +1654,9 @@ Manipulator::Manipulator(int _no_links) : no_links(_no_links)
         dh_sin_theta.push_back(0.0);
         dh_cos_alpha.push_back(1.0);
         dh_sin_alpha.push_back(0.0);
+        masses.push_back(0.0);
+        com_positions.push_back(Vector3f(0, 0, 0));
+        inertia_tensors.push_back(Matrix3f::Zero());
     }
 
     htm_world_to_dh0 = Matrix4f::Identity();
@@ -1707,8 +1710,8 @@ void Manipulator::set_inertial_param(int ind_link, float _mass, Vector3f _com, M
     if (ind_link < 0 || ind_link >= no_links)
         throw std::runtime_error("The link index should be between 0 and " + std::to_string(no_links - 1) + "!");
 
-    if (_mass <= 0)
-        throw std::runtime_error("The mass should be strictly positive!");
+    if (_mass < 0)
+        throw std::runtime_error("The mass should be nonnegative!");
 
     masses[ind_link] = _mass;
     com_positions[ind_link] = _com;

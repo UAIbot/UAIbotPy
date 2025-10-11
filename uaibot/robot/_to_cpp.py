@@ -15,7 +15,7 @@ def _to_cpp(robot):
 
     for i in range(n):
         cpp_robot.set_joint_param(i, robot.links[i].theta, robot.links[i].d, robot.links[i].alpha, robot.links[i].a, int(robot.links[i].joint_type), robot.joint_limit[i,0], robot.joint_limit[i,1])
-        cpp_robot.set_inertial_param(i, robot.links[i].mass, robot.links[i].center_of_mass, robot.links[i].inertia_tensor)
+        cpp_robot.set_inertial_param(i, robot.links[i].mass, robot.links[i].center_of_mass, robot.links[i].inertia_tensor, robot.links[i].wrt_dh)
         for j in range(len(robot.links[i].col_objects)):
             prim = robot.links[i].col_objects[j][0]
             htm = robot.links[i].col_objects[j][1]

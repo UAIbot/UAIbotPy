@@ -315,7 +315,6 @@ struct Manipulator
     vector<float> masses;
     vector<Matrix3f> inertia_tensors;
     vector<Vector3f> com_positions;
-    Vector3f gravity_vec = Vector3f(0, 0, -9.81);
 
     float tube_radius;
 
@@ -358,6 +357,8 @@ struct Manipulator
     VectorXf newtonEuler(const VectorXf &q, const VectorXf &qdot,
                       const VectorXf &qddot) const;
 
+public:
+    Vector3f gravity_vec = Vector3f(0, 0, -9.81);
 };
 
 int mini(int a, int b);
