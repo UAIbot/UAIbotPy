@@ -358,7 +358,7 @@ struct Manipulator
                       const VectorXf &qddot) const;
 
 public:
-    Vector3f gravity_vec = Vector3f(0, 0, -9.81);
+    Vector3f gravity_vec = Vector3f(0, 0, 9.81);
 };
 
 int mini(int a, int b);

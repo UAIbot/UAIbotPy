@@ -193,7 +193,10 @@ class Robot:
     
     @property
     def gravity_vector(self):
-        """The gravity vector used in the dynamic model of the robot"""
+        """The gravity vector used in the dynamic model of the robot.
+        The default is [0 0 9.81]. This must be positive! Since the
+        dynamic model will be F - m*g.
+        """
         return self._gravity_vector
 
     @gravity_vector.setter
@@ -281,7 +284,7 @@ class Robot:
         self._htm_base_0 = htm_base_0
         self._htm_n_eef = htm_n_eef
         self._eef_frame_visible = eef_frame_visible
-        self._gravity_vector = np.array([0, 0, -9.81]).reshape((3,1))
+        self._gravity_vector = np.array([0, 0, 9.81]).reshape((3,1))
 
         
         if eef_frame_visible:

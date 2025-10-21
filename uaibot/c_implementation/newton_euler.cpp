@@ -35,7 +35,9 @@ VectorXf recursiveNewtonEuler(const VectorXf &q, const VectorXf &qdot,
   // masses and inertias — prefer reading from robot, fall back to Get... for
   // demo
   std::vector<float> m = robot.masses;
+  // Inertia tensors w.r.t. center of mass
   std::vector<Matrix3f> I = robot.inertia_tensors;
+  // Center of mass positions expressed as displacements w.r.t. DH frame
   std::vector<Vector3f> r_cms = robot.com_positions;
   // allocate
   MatrixXf w_i = MatrixXf::Zero(3, n);
@@ -50,7 +52,7 @@ VectorXf recursiveNewtonEuler(const VectorXf &q, const VectorXf &qdot,
   Vector3f a_i0 = Vector3f::Zero();
 
   // FK transforms
-  std::vector<Matrix4f> T = robot.fk(q, Matrix4f::Identity(), false).htm_dh;
+  std::vector<Matrix4f> T = robot.fk(q, robot.htm_world_to_dh0, false).htm_dh;
 
   for (size_t i = 0; i < n; i++) {
     Matrix3f R_im1_0;
