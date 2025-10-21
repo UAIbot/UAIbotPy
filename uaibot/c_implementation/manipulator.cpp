@@ -2472,6 +2472,29 @@ Eigen::VectorXd invSmapSE3(const Eigen::Matrix4d A){
   return xi;
 }
 
+Eigen::Matrix3f skew(const Eigen::Vector3f& w) {
+    Eigen::Matrix3f S;
+    S <<     0, -w(2),  w(1),
+          w(2),     0, -w(0),
+         -w(1),  w(0),     0;
+    return S;
+}
+
+
+Eigen::Matrix3f expSO3(const Eigen::Matrix3f A){
+  Eigen::Matrix3f R = Eigen::Matrix3f::Identity();
+  float theta = sqrt(pow(A(1, 0), 2) + pow(A(0, 2), 2) + pow(A(2, 1), 2));
+  // If theta is close to zero, use the first order approximation
+  if (theta < c_theta_zero) {
+    R = Eigen::Matrix3f::Identity() + A;
+  } 
+  else {
+    R = Eigen::Matrix3f::Identity() + (sin(theta) / theta) * A +
+        ((1 - cos(theta)) / pow(theta, 2)) * A * A;
+  }
+  return R;
+}
+
 Eigen::Matrix4d expSE3(const Eigen::Matrix4d X){
   Eigen::Matrix3d A = X.block<3, 3>(0, 0);
   Eigen::Vector3d v = X.block<3, 1>(0, 3);

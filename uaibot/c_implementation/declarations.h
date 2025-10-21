@@ -432,7 +432,12 @@ VectorXf solveQP(const MatrixXf& H,const VectorXf& f,const MatrixXf& A,const Vec
 VectorFieldResult vectorfield_SE3(const Eigen::Matrix4d& state, const vector<Eigen::Matrix4d>& curve, float kt1, float kt2, float kt3, float kn1, float kn2,
     const vector<Eigen::MatrixXd>& curve_derivative=std::vector<Eigen::MatrixXd>(), double delta=c_delta, double ds=c_ds);
 
+std::tuple<double, int> ECdistance(const Eigen::MatrixXd& state, const vector<Eigen::Matrix4d>& curve);
 Eigen::Matrix4d expSE3(const Eigen::Matrix4d X);
+
+Eigen::Matrix3f expSO3(const Eigen::Matrix3f A);
+
+Eigen::Matrix3f skew(const Eigen::Vector3f& w);
 
 Eigen::Matrix4d SmapSE3(const Eigen::VectorXd xi);
 

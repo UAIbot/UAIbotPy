@@ -1,9 +1,9 @@
 // ne_newton_euler.cpp
 // #include <eigen3/Eigen/Dense>
-#include "declarations.h"
 #include <iostream>
 #include <vector>
-// #include <Eigen/Dense>
+#include <Eigen/Dense>
+#include "declarations.h"
 
 using Eigen::Matrix3f;
 using Eigen::Matrix4f;
