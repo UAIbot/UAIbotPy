@@ -3,6 +3,7 @@
 #include <sstream>
 #include <Eigen/Core>
 #include <Eigen/Dense>
+#include <stdexcept>
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -864,6 +865,8 @@ GeometricPrimitives GeometricPrimitives::to_pointcloud(float disc) const
         return this->copy();
     if (type == 4)
         return generate_point_cloud_convexpolygon(points_gp, A, b, htm, disc);
+    else
+        throw std::runtime_error("Unknown geometric primitive type for pointcloud computation.");
 }
 
 ProjResult GeometricPrimitives::projection(Vector3f point, float h, float eps) const
@@ -878,6 +881,8 @@ ProjResult GeometricPrimitives::projection(Vector3f point, float h, float eps) c
         return projection_pointcloud(kdtree, pointcloud, point, h == 0 ? 1e-8 : h, eps == 0 ? 1e-8 : eps);
     if (type == 4)
         return projection_convexpolytope(A, b, htm, point, lx, ly, lz, center, h == 0 ? 1e-8 : h, eps == 0 ? 1e-8 : eps);
+    else
+        throw std::runtime_error("Unknown geometric primitive type for projection.");
 }
 
 Vector3f support_sphere(Vector3f direction, float radius, Matrix4f htm)
@@ -984,6 +989,8 @@ Vector3f GeometricPrimitives::support(Vector3f direction) const
         return support_pointcloud(direction, points_gp);
     if (type == 4)
         return support_convexpolygon(direction, points_gp, htm);
+    else
+        throw std::runtime_error("Unknown geometric primitive type for support function.");
 }
 
 float max4(float a1, float a2, float a3, float a4)
@@ -1105,6 +1112,10 @@ AABB GeometricPrimitives::get_aabb() const
         aabb.p = Q * this->center + p;
 
         return aabb;
+    }
+    else
+    {
+        throw std::runtime_error("Unknown geometric primitive type for AABB computation.");
     }
 }
 
@@ -1574,6 +1585,8 @@ GeometricPrimitives GeometricPrimitives::copy() const
     }
     if (type == 4)
         return GeometricPrimitives::create_convexpolytope(htm, A, b);
+    else
+        throw std::runtime_error("Unknown geometric primitive type for copy.");
 }
 
 string PrimDistResult::toString() const
