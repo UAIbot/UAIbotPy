@@ -2181,8 +2181,7 @@ DistStructRobotObj Manipulator::compute_dist(GeometricPrimitives obj,
 
 DistStructRobotObj
 Manipulator::signedDistance(GeometricPrimitives obj, VectorXf q, Matrix4f htm,
-                            DistStructRobotObj old_dist_struct, float tol,
-                            int no_iter_max, float max_dist, float r) const {
+                            float max_dist, float r) const {
   FKResult fkres = fk(q, htm, true);
 
   AABB obj_aabb = obj.get_aabb();
@@ -2211,10 +2210,10 @@ Manipulator::signedDistance(GeometricPrimitives obj, VectorXf q, Matrix4f htm,
 
       if (AABB::dist_aabb(collisionObj.get_aabb(), obj_aabb) < max_dist) {
         tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf> res =
-            distBox2Box(collisionObj, obj, r)
-            // PrimDistResult pdr = obj.dist_to(obj_copy, h, eps, tol,
-            // no_iter_max, p_obj_0);
-            float dist = get<0>(res);
+            distBox2Box(collisionObj, obj, r);
+        // PrimDistResult pdr = obj.dist_to(obj_copy, h, eps, tol,
+        // no_iter_max, p_obj_0);
+        float dist = get<0>(res);
         std::vector<Eigen::Vector3f> P = getBoxVertices(collisionObj);
 
         VectorXf grad = get<1>(res);
@@ -2253,7 +2252,7 @@ Manipulator::signedDistance(GeometricPrimitives obj, VectorXf q, Matrix4f htm,
 
         old_rows = dist_tot.rows();
         dist_tot.conservativeResize(old_rows + 1, Eigen::NoChange);
-        dist_tot[old_rows] = pdr.dist;
+        dist_tot[old_rows] = dist;
 
         dsro.list_info.push_back(dslo_new);
       }

@@ -34,7 +34,7 @@ from ._add_col_object import _add_col_object
 from ._attach_object import _attach_object
 from ._detach_object import _detach_object
 
-from ._compute_dist import _compute_dist
+from ._compute_dist import _compute_dist, _diststructrobotobj_cpp2py
 from ._compute_dist_auto import _compute_dist_auto
 from ._check_free_config import _check_free_config
 
@@ -1450,6 +1450,17 @@ class Robot:
     """
 
         return _compute_dist_auto(self, q, old_dist_struct, tol, no_iter_max, max_dist, h, eps, mode)
+
+    def signed_distance(self, obj: MetricObject, q: Optional[Vector] = None, htm: Optional[HTMatrix]=None, 
+                     max_dist: float = np.inf, r: float = 1e-2,
+                     mode: str = 'auto') -> "DistStructRobotObj":
+
+        if q is None:
+            q = self.q
+        if htm is None:
+            htm = self.htm
+        dsro = self.cpp_robot.signed_distance(obj.cpp_obj, q, htm, max_dist, r)
+        return _diststructrobotobj_cpp2py(dsro, obj, self)
 
     def check_free_config(self, q: Optional[Vector]=None, htm: Optional[HTMatrix]=None, 
                           obstacles: List[MetricObject]=[], check_joint: bool = True, check_auto: bool = True,

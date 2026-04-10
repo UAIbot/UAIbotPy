@@ -335,7 +335,7 @@ std::vector<Eigen::Vector3f> getNormalsVectors(const GeometricPrimitives &box) {
   return normals;
 }
 
-tuple<float, Eigen::VectorXf Eigen::MatrixXf, Eigen::MatrixXf>
+tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distBox2Box(const GeometricPrimitives &box1, const GeometricPrimitives &box2,
             float r) {
   // Throw error if the inputs are not boxes (not Implemented yet)
@@ -380,6 +380,7 @@ distBox2Box(const GeometricPrimitives &box1, const GeometricPrimitives &box2,
   float finalDist = get<0>(finalRes);
   Eigen::VectorXf gradSmax = get<1>(finalRes);
   // Apply chain rule to get the gradient with respect to the original vertices
+  Eigen::VectorXf finalGrad = Eigen::VectorXf::Zero(num_V);
   finalGrad = gradSmax.transpose() * jacobian;
 
   // 4. Assemble spatial gradients for P and R
@@ -409,5 +410,5 @@ distBox2Box(const GeometricPrimitives &box1, const GeometricPrimitives &box2,
       grad_box2.row(r_idx) -= w_i * sum_v * d_i.transpose(); // minus sign!
     }
   }
-  return make_tuple(finalDist, finalGrad, jac_box1, jac_box2);
+  return make_tuple(finalDist, finalGrad, grad_box1, grad_box2);
 }

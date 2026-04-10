@@ -346,6 +346,7 @@ struct Manipulator
 
     DistStructRobotAuto compute_dist_auto(VectorXf q, DistStructRobotAuto old_dist_struct,
                                                 float tol, int no_iter_max, float max_dist, float h, float eps) const;
+    DistStructRobotObj signedDistance(GeometricPrimitives obj, VectorXf q, Matrix4f htm, float max_dist, float r) const;
 
 };
 
