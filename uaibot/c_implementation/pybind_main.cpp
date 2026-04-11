@@ -24,6 +24,7 @@
 #include <Eigen/Dense>
 
 #include "declarations.h"
+#include "smooth_functions.hpp"
 
 using namespace std;
 using namespace std::chrono;
@@ -230,4 +231,5 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
      m.def("vectorfield_SE3", &vectorfield_SE3, py::arg("state"), py::arg("curve"), py::arg("kt1"), py::arg("kt2"),
            py::arg("kt3"), py::arg("kn1"), py::arg("kn2"), py::arg("curve_derivative")=std::vector<Eigen::MatrixXd>(),
            py::arg("delta") = c_delta, py::arg("ds")=c_ds);
+     m.def("distance_box2box", &distBox2Box, py::arg("box1"), py::arg("box2"), py::arg("r"));
 }

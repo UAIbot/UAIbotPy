@@ -373,12 +373,20 @@ distBox2Box(const GeometricPrimitives &box1, const GeometricPrimitives &box2,
     innerMins.push_back(dist);
     // Store the gradient in the rows of the jacobian
     jacobian.row(i) = grad.transpose(); // Size 1 x num_V
+    // if (i == 0) {
+    //   std::cout << "[DEBUG] jacobian row 0 sum: " << jacobian.row(0).sum()
+    //             << std::endl;
+    //   std::cout << "[DEBUG] jacobian row 0: " << jacobian.row(0) << std::endl;
+    // }
   }
 
   tuple<float, Eigen::VectorXf> finalRes =
       smoothMaxListWithGradient(innerMins, r);
   float finalDist = get<0>(finalRes);
   Eigen::VectorXf gradSmax = get<1>(finalRes);
+  // std::cout << "[DEBUG] gradSmax sum: " << gradSmax.sum()
+  //           << ", size: " << gradSmax.size() << std::endl;
+  // std::cout << "[DEBUG] gradSmax: " << gradSmax.transpose() << std::endl;
   // Apply chain rule to get the gradient with respect to the original vertices
   Eigen::VectorXf finalGrad = Eigen::VectorXf::Zero(num_V);
   finalGrad = gradSmax.transpose() * jacobian;
@@ -400,6 +408,10 @@ distBox2Box(const GeometricPrimitives &box1, const GeometricPrimitives &box2,
       }
       grad_box1.row(p_idx) += w_i * sum_v * d_i.transpose();
     }
+    // Eigen::Vector3f sum_grad_box1 = grad_box1.colwise().sum();
+    // std::cout << "[DEBUG] sum of grad_box1 over vertices (should match "
+    //              "translation gradient): "
+    //           << sum_grad_box1.transpose() << std::endl;
 
     // For box2 vertices (R) – note the negative sign because v = p - r
     for (int r_idx = 0; r_idx < num_R; ++r_idx) {
@@ -410,5 +422,55 @@ distBox2Box(const GeometricPrimitives &box1, const GeometricPrimitives &box2,
       grad_box2.row(r_idx) -= w_i * sum_v * d_i.transpose(); // minus sign!
     }
   }
+  // Lambda to compute scalar distance given box1 vertices P_mod
+  // auto computeDistance =
+  //     [&](const std::vector<Eigen::Vector3f> &P_mod) -> float {
+  //   std::vector<Eigen::Vector3f> minkowski_mod;
+  //   minkowski_mod.reserve(num_P * num_R);
+  //   for (const auto &p : P_mod)
+  //     for (const auto &r : R)
+  //       minkowski_mod.push_back(p - r);
+  //
+  //   std::vector<float> innerMins_mod;
+  //   for (size_t i = 0; i < num_N; ++i) {
+  //     Eigen::Vector3f d = normalsSet[i].normalized();
+  //     std::vector<float> dots(num_V);
+  //     for (size_t j = 0; j < num_V; ++j)
+  //       dots[j] = d.dot(minkowski_mod[j]);
+  //     float dist_mod = std::get<0>(smoothMinListWithGradient(dots, r));
+  //     innerMins_mod.push_back(dist_mod);
+  //   }
+  //   return std::get<0>(smoothMaxListWithGradient(innerMins_mod, r));
+  // };
+  // // ----- DEBUG: Numerical per-vertex gradient check -----
+  // float eps = 1e-4f;
+  // Eigen::MatrixXf num_grad_box1(num_P, 3);
+  // for (int v = 0; v < num_P; ++v) {
+  //   for (int axis = 0; axis < 3; ++axis) {
+  //     Eigen::Vector3f delta = Eigen::Vector3f::Zero();
+  //     delta(axis) = eps;
+  //
+  //     std::vector<Eigen::Vector3f> P_plus = P;
+  //     P_plus[v] += delta;
+  //     float D_plus = computeDistance(P_plus);
+  //
+  //     std::vector<Eigen::Vector3f> P_minus = P;
+  //     P_minus[v] -= delta;
+  //     float D_minus = computeDistance(P_minus);
+  //
+  //     num_grad_box1(v, axis) = (D_plus - D_minus) / (2.0f * eps);
+  //   }
+  // }
+  // std::cout << "[DEBUG] Analytical grad_box1:\n" << grad_box1 << std::endl;
+  // std::cout << "[DEBUG] Numerical grad_box1:\n" << num_grad_box1 << std::endl;
+  // std::cout << "[DEBUG] Difference:\n"
+  //           << (grad_box1 - num_grad_box1) << std::endl;
+  // // --------------------------------------------------------
+  // Eigen::Vector3f ana_grad_t = grad_box1.colwise().sum();
+  // Eigen::Vector3f num_grad_t = num_grad_box1.colwise().sum();
+  // std::cout << "[DEBUG] Analytical translation grad: " << ana_grad_t.transpose()
+  //           << std::endl;
+  // std::cout << "[DEBUG] Numerical  translation grad: " << num_grad_t.transpose()
+  //           << std::endl;
   return make_tuple(finalDist, finalGrad, grad_box1, grad_box2);
 }

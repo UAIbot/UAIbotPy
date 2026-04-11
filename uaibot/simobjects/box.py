@@ -12,6 +12,9 @@ if TYPE_CHECKING:
     
 from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject
 from typing import Optional, Tuple, List
+import os
+if os.environ['CPP_SO_FOUND']=="1":
+    import uaibot_cpp_bind as ub_cpp
 
 class Box:
     """
@@ -513,3 +516,7 @@ class Box:
         else:
             pr = obj_cpp.projection(Utils.cvt(point), h, eps)
             return Utils.cvt(pr.proj), pr.dist
+
+    def signed_distance(self, box2: "Box", r:float=1e-2):
+        res = ub_cpp.distance_box2box(Utils.obj_to_cpp(self), Utils.obj_to_cpp(box2), r)
+        return res
