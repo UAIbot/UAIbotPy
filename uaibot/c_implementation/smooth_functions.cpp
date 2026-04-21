@@ -335,7 +335,7 @@ std::vector<Eigen::Vector3f> getNormalsVectors(const GeometricPrimitives &box) {
   return normals;
 }
 
-tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf>
+tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distBox2Box(const GeometricPrimitives &box1, const GeometricPrimitives &box2,
             float r) {
   // Throw error if the inputs are not boxes (not Implemented yet)
@@ -376,7 +376,8 @@ distBox2Box(const GeometricPrimitives &box1, const GeometricPrimitives &box2,
     // if (i == 0) {
     //   std::cout << "[DEBUG] jacobian row 0 sum: " << jacobian.row(0).sum()
     //             << std::endl;
-    //   std::cout << "[DEBUG] jacobian row 0: " << jacobian.row(0) << std::endl;
+    //   std::cout << "[DEBUG] jacobian row 0: " << jacobian.row(0) <<
+    //   std::endl;
     // }
   }
 
@@ -391,9 +392,11 @@ distBox2Box(const GeometricPrimitives &box1, const GeometricPrimitives &box2,
   Eigen::VectorXf finalGrad = Eigen::VectorXf::Zero(num_V);
   finalGrad = gradSmax.transpose() * jacobian;
 
-  // 4. Assemble spatial gradients for P and R
+  // 4. Assemble spatial gradients for P and R vertices
   Eigen::MatrixXf grad_box1 = Eigen::MatrixXf::Zero(num_P, 3);
   Eigen::MatrixXf grad_box2 = Eigen::MatrixXf::Zero(num_R, 3);
+  // Gradient with respect to normals (face directions of P and R)
+  Eigen::MatrixXf grad_normals = Eigen::MatrixXf::Zero(num_N, 3);
 
   for (int i = 0; i < num_N; ++i) {
     float w_i = gradSmax(i);
@@ -421,46 +424,52 @@ distBox2Box(const GeometricPrimitives &box1, const GeometricPrimitives &box2,
       }
       grad_box2.row(r_idx) -= w_i * sum_v * d_i.transpose(); // minus sign!
     }
+    // For normals (face directions)
+    for (int v_idx = 0; v_idx < num_V; ++v_idx) {
+      // w_i * sum_{p in P}sum_{r in R} dgn/dhnpr * (p - r) contribution
+      grad_normals.row(i) +=
+          w_i * jacobian(i, v_idx) * minkowskiVertices[v_idx].transpose();
+    }
   }
   // Lambda to compute scalar distance given box1 vertices P_mod
-  // auto computeDistance =
-  //     [&](const std::vector<Eigen::Vector3f> &P_mod) -> float {
-  //   std::vector<Eigen::Vector3f> minkowski_mod;
-  //   minkowski_mod.reserve(num_P * num_R);
-  //   for (const auto &p : P_mod)
-  //     for (const auto &r : R)
-  //       minkowski_mod.push_back(p - r);
-  //
-  //   std::vector<float> innerMins_mod;
-  //   for (size_t i = 0; i < num_N; ++i) {
-  //     Eigen::Vector3f d = normalsSet[i].normalized();
-  //     std::vector<float> dots(num_V);
-  //     for (size_t j = 0; j < num_V; ++j)
-  //       dots[j] = d.dot(minkowski_mod[j]);
-  //     float dist_mod = std::get<0>(smoothMinListWithGradient(dots, r));
-  //     innerMins_mod.push_back(dist_mod);
-  //   }
-  //   return std::get<0>(smoothMaxListWithGradient(innerMins_mod, r));
-  // };
-  // // ----- DEBUG: Numerical per-vertex gradient check -----
-  // float eps = 1e-4f;
-  // Eigen::MatrixXf num_grad_box1(num_P, 3);
-  // for (int v = 0; v < num_P; ++v) {
-  //   for (int axis = 0; axis < 3; ++axis) {
-  //     Eigen::Vector3f delta = Eigen::Vector3f::Zero();
-  //     delta(axis) = eps;
-  //
-  //     std::vector<Eigen::Vector3f> P_plus = P;
-  //     P_plus[v] += delta;
-  //     float D_plus = computeDistance(P_plus);
-  //
-  //     std::vector<Eigen::Vector3f> P_minus = P;
-  //     P_minus[v] -= delta;
-  //     float D_minus = computeDistance(P_minus);
-  //
-  //     num_grad_box1(v, axis) = (D_plus - D_minus) / (2.0f * eps);
-  //   }
-  // }
+  auto computeDistance =
+      [&](const std::vector<Eigen::Vector3f> &P_mod) -> float {
+    std::vector<Eigen::Vector3f> minkowski_mod;
+    minkowski_mod.reserve(num_P * num_R);
+    for (const auto &p : P_mod)
+      for (const auto &r : R)
+        minkowski_mod.push_back(p - r);
+
+    std::vector<float> innerMins_mod;
+    for (size_t i = 0; i < num_N; ++i) {
+      Eigen::Vector3f d = normalsSet[i].normalized();
+      std::vector<float> dots(num_V);
+      for (size_t j = 0; j < num_V; ++j)
+        dots[j] = d.dot(minkowski_mod[j]);
+      float dist_mod = std::get<0>(smoothMinListWithGradient(dots, r));
+      innerMins_mod.push_back(dist_mod);
+    }
+    return std::get<0>(smoothMaxListWithGradient(innerMins_mod, r));
+  };
+  // ----- DEBUG: Numerical per-vertex gradient check -----
+  float eps = 1e-4f;
+  Eigen::MatrixXf num_grad_box1(num_P, 3);
+  for (int v = 0; v < num_P; ++v) {
+    for (int axis = 0; axis < 3; ++axis) {
+      Eigen::Vector3f delta = Eigen::Vector3f::Zero();
+      delta(axis) = eps;
+
+      std::vector<Eigen::Vector3f> P_plus = P;
+      P_plus[v] += delta;
+      float D_plus = computeDistance(P_plus);
+
+      std::vector<Eigen::Vector3f> P_minus = P;
+      P_minus[v] -= delta;
+      float D_minus = computeDistance(P_minus);
+
+      num_grad_box1(v, axis) = (D_plus - D_minus) / (2.0f * eps);
+    }
+  }
   // std::cout << "[DEBUG] Analytical grad_box1:\n" << grad_box1 << std::endl;
   // std::cout << "[DEBUG] Numerical grad_box1:\n" << num_grad_box1 << std::endl;
   // std::cout << "[DEBUG] Difference:\n"
@@ -468,9 +477,90 @@ distBox2Box(const GeometricPrimitives &box1, const GeometricPrimitives &box2,
   // // --------------------------------------------------------
   // Eigen::Vector3f ana_grad_t = grad_box1.colwise().sum();
   // Eigen::Vector3f num_grad_t = num_grad_box1.colwise().sum();
-  // std::cout << "[DEBUG] Analytical translation grad: " << ana_grad_t.transpose()
+  // std::cout << "[DEBUG] Analytical translation grad: " <<
+  // ana_grad_t.transpose()
   //           << std::endl;
-  // std::cout << "[DEBUG] Numerical  translation grad: " << num_grad_t.transpose()
+  // std::cout << "[DEBUG] Numerical  translation grad: " <<
+  // num_grad_t.transpose()
   //           << std::endl;
-  return make_tuple(finalDist, finalGrad, grad_box1, grad_box2);
+  //
+  // ----- DEBUG: Numerical normal gradient check (rotation-based) -----
+  auto computeDistanceWithNormal = [&](int normal_idx,
+                                       const Eigen::Vector3f &n_mod) -> float {
+    // Recompute only the smooth min for the modified normal, then redo smooth
+    // max
+    std::vector<float> innerMins_mod = innerMins; // copy original inner mins
+    // Recompute the entry for the modified normal
+    Eigen::Vector3f d_mod = n_mod.normalized();
+    std::vector<float> dots_mod(num_V);
+    for (int j = 0; j < num_V; ++j) {
+      dots_mod[j] = d_mod.dot(minkowskiVertices[j]);
+    }
+    innerMins_mod[normal_idx] =
+        std::get<0>(smoothMinListWithGradient(dots_mod, r));
+    return std::get<0>(smoothMaxListWithGradient(innerMins_mod, r));
+  };
+  Eigen::MatrixXf num_grad_normals(num_N, 3);
+  float rot_eps = 1e-4f; // small rotation angle in radians
+
+  for (int i = 0; i < num_N; ++i) {
+    Eigen::Vector3f n_orig = normalsSet[i].normalized();
+
+    // Build two orthonormal tangent vectors
+    Eigen::Vector3f t1, t2;
+    if (std::abs(n_orig.x()) > std::abs(n_orig.y()))
+      t1 = Eigen::Vector3f(-n_orig.z(), 0.0f, n_orig.x()).normalized();
+    else
+      t1 = Eigen::Vector3f(0.0f, n_orig.z(), -n_orig.y()).normalized();
+    t2 = n_orig.cross(t1).normalized();
+
+    // Lambda to rotate n_orig around axis 'u' by angle 'theta'
+    auto rotate = [&](const Eigen::Vector3f &u,
+                      float theta) -> Eigen::Vector3f {
+      Eigen::AngleAxisf rot(theta, u);
+      return rot * n_orig;
+    };
+
+    // Numerical derivatives w.r.t. rotation around t1 and t2
+    float D_plus_t1 = computeDistanceWithNormal(i, rotate(t1, rot_eps));
+    float D_minus_t1 = computeDistanceWithNormal(i, rotate(t1, -rot_eps));
+    float dD_dtheta1 = (D_plus_t1 - D_minus_t1) / (2.0f * rot_eps);
+
+    float D_plus_t2 = computeDistanceWithNormal(i, rotate(t2, rot_eps));
+    float D_minus_t2 = computeDistanceWithNormal(i, rotate(t2, -rot_eps));
+    float dD_dtheta2 = (D_plus_t2 - D_minus_t2) / (2.0f * rot_eps);
+
+    // The relation: dD = (∂D/∂n)·dn, with dn = (u × n) dθ.
+    // So dD/dθ = (∂D/∂n)·(u × n).
+    // For u = t1, u × n = t2 (since t1,t2,n form right-handed orthonormal)
+    // For u = t2, u × n = -t1.
+    // Therefore:
+    // dD_dtheta1 = grad_n · t2
+    // dD_dtheta2 = grad_n · (-t1)
+    // Solve for grad_n (projected onto tangent plane):
+    Eigen::Vector3f num_grad_tangent = dD_dtheta1 * t2 - dD_dtheta2 * t1;
+
+    // The full analytical gradient (may have a component along n, but that is
+    // zero for unit vector constraint) We only compare the tangential part.
+    num_grad_normals.row(i) = num_grad_tangent.transpose();
+  }
+
+  // For comparison, project analytical gradient onto tangent plane
+  Eigen::MatrixXf ana_grad_tangent(num_N, 3);
+  for (int i = 0; i < num_N; ++i) {
+    Eigen::Vector3f n = normalsSet[i].normalized();
+    Eigen::Vector3f ana = grad_normals.row(i).transpose();
+    // Remove component along n (should be zero anyway, but for safety)
+    Eigen::Vector3f ana_tan = ana - (ana.dot(n)) * n;
+    ana_grad_tangent.row(i) = ana_tan.transpose();
+  }
+
+  // std::cout << "[DEBUG] Analytical grad_normals (tangential part):\n"
+  //           << ana_grad_tangent << std::endl;
+  // std::cout << "[DEBUG] Numerical grad_normals (tangential):\n"
+  //           << num_grad_normals << std::endl;
+  // std::cout << "[DEBUG] Difference (tangential):\n"
+  //           << (ana_grad_tangent - num_grad_normals) << std::endl;
+  // -------------------------------------------------------------
+  return make_tuple(finalDist, finalGrad, grad_box1, grad_box2, grad_normals);
 }

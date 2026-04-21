@@ -51,6 +51,6 @@ std::vector<Eigen::Vector3f>
 getMinkowskiDifferenceVertices(const GeometricPrimitives &box1,
                                const GeometricPrimitives &box2);
 std::vector<Eigen::Vector3f> getNormalsVectors(const GeometricPrimitives &box);
-tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf>
+tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distBox2Box(const GeometricPrimitives &box1, const GeometricPrimitives &box2,
             float r);

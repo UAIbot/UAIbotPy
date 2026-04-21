@@ -2198,6 +2198,7 @@ Manipulator::signedDistance(GeometricPrimitives obj, VectorXf q, Matrix4f htm,
     MatrixXf Jv = fkres.jac_v_dh[ind_links];
     MatrixXf Jw = fkres.jac_w_dh[ind_links];
     Vector3f pc = fkres.get_p_dh(ind_links);
+    Matrix3f Ri = fkres.get_Q_dh(ind_links);
     MatrixXf Jv_aux = Jv + s_mat(pc) * Jw;
 
     for (int ind_obj_link = 0; ind_obj_link < geo_prim[ind_links].size();
@@ -2209,18 +2210,24 @@ Manipulator::signedDistance(GeometricPrimitives obj, VectorXf q, Matrix4f htm,
           fkres.htm_dh[ind_links] * geo_prim[ind_links][ind_obj_link].htm;
 
       if (AABB::dist_aabb(collisionObj.get_aabb(), obj_aabb) < max_dist) {
-        tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf> res =
+        tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf> res =
             distBox2Box(collisionObj, obj, r);
         // PrimDistResult pdr = obj.dist_to(obj_copy, h, eps, tol,
         // no_iter_max, p_obj_0);
         float dist = get<0>(res);
         std::vector<Eigen::Vector3f> P = getBoxVertices(collisionObj);
+        std::vector<Eigen::Vector3f> normalsColObj = getNormalsVectors(collisionObj);
+        std::vector<Eigen::Vector3f> normalsObj = getNormalsVectors(obj);
+        std::vector<Eigen::Vector3f> normalsSet;
+        normalsSet.insert(normalsSet.end(), normalsColObj.begin(), normalsColObj.end());
+        normalsSet.insert(normalsSet.end(), normalsObj.begin(), normalsObj.end());
 
         VectorXf grad = get<1>(res);
         // Each row is a 1 x 3 gradient for every vertex of each object
         MatrixXf gradCollisionObj = get<2>(
             res); // |P| x 3, where P are the vertices of the collision object
         MatrixXf gradObj = get<3>(res);
+        MatrixXf gradNormals = get<4>(res);
 
         DistStructLinkObj dslo_new;
 
@@ -2233,17 +2240,29 @@ Manipulator::signedDistance(GeometricPrimitives obj, VectorXf q, Matrix4f htm,
         dslo_new.point_link =
             Eigen::Vector3f::Zero(); // Not computed in this case
 
+        // Compute the gradient of the distance dDdq:
+        // dDdq = sum_{p \in P} dD/dp * dp/dq + sum_{n \in N} dD/dn * dn/dq
         // Loop over vertices of P
-        Eigen::RowVectorXf dPdq = Eigen::RowVectorXf::Zero(q.rows());
+        Eigen::RowVectorXf dDdq_wrtP = Eigen::RowVectorXf::Zero(q.rows());
         for (int i = 0; i < P.size(); i++) {
           // gradCollisionObj.row(i) is the gradient for vertex i of the
           // collision object
           Vector3f pi = P[i];
-          MatrixXf JvAtColVertex = Jv_aux - s_mat(pi) * Jw;
+          MatrixXf JvAtColVertex = Jv_aux - s_mat(pi) * Jw; // dp/dq
           // Contribution of vertex i to the gradient of the distance with respect to q
-          dPdq += gradCollisionObj.row(i) * JvAtColVertex; 
+          dDdq_wrtP += gradCollisionObj.row(i) * JvAtColVertex; 
         }
-        dslo_new.jac_distance = dPdq;
+        // Loop over normal vectors in N which belong to P (ColObj) (Only these are dependent on q)
+        Eigen::RowVectorXf dDdq_wrtN = Eigen::RowVectorXf::Zero(q.rows());
+        for (int i = 0; i < normalsColObj.size(); i++) {
+        // for (int i = 0; i < gradNormals.rows(); i++) {
+          // Vector3f ni = Ri * normalsSet[i].normalized(); // normal vector i expressed in world coordinates
+          Vector3f ni = normalsSet[i].normalized(); // normal vector i expressed in world coordinates
+          MatrixXf JwAtNormal = -s_mat(ni) * Jw; // dn/dq
+          dDdq_wrtN += gradNormals.row(i) * JwAtNormal; 
+        }
+        Eigen::RowVectorXf dDdq = dDdq_wrtP + dDdq_wrtN;
+        dslo_new.jac_distance = dDdq;
 
         old_rows = jac_tot.rows();
         jac_tot.conservativeResize(old_rows + 1, Eigen::NoChange);
