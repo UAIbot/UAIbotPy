@@ -1,5 +1,3 @@
-#include "gjk.h"
-#include "nanoflann.hpp"
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <chrono>
@@ -13,6 +11,8 @@
 #include <vector>
 
 #include "declarations.h"
+#include "gjk.h"
+#include "nanoflann.hpp"
 #include "smooth_functions.hpp"
 
 using namespace std;
@@ -120,28 +120,26 @@ string TaskResult::toString() const {
   return oss.str();
 }
 
-string remove_space(const string &input) {
+string remove_space(const string& input) {
   string result;
   for (char ch : input)
-    if (ch != ' ')
-      result += ch;
+    if (ch != ' ') result += ch;
 
   return result;
 }
 
-int extract_key(const string &str, const string &key_str) {
+int extract_key(const string& str, const string& key_str) {
   string key = "\"" + key_str + "\": ";
   auto start_pos = str.find(key);
   start_pos += key.length();
   auto end_pos = str.find(',', start_pos);
-  if (end_pos == string::npos)
-    end_pos = str.length();
+  if (end_pos == string::npos) end_pos = str.length();
 
   string number_str = str.substr(start_pos, end_pos - start_pos);
   return std::stoi(number_str);
 }
 
-float extract_no(const string &str) {
+float extract_no(const string& str) {
   std::istringstream iss(str);
   float number = 0.0;
   iss >> number;
@@ -198,8 +196,9 @@ GeometricPrimitives GeometricPrimitives::create_box(Matrix4f htm, float width,
   return gp;
 }
 
-GeometricPrimitives
-GeometricPrimitives::create_cylinder(Matrix4f htm, float radius, float height) {
+GeometricPrimitives GeometricPrimitives::create_cylinder(Matrix4f htm,
+                                                         float radius,
+                                                         float height) {
   GeometricPrimitives gp = GeometricPrimitives();
   gp.lx = radius;
   gp.ly = radius;
@@ -210,8 +209,8 @@ GeometricPrimitives::create_cylinder(Matrix4f htm, float radius, float height) {
   return gp;
 }
 
-GeometricPrimitives
-GeometricPrimitives::create_pointcloud(vector<Vector3f> &points) {
+GeometricPrimitives GeometricPrimitives::create_pointcloud(
+    vector<Vector3f>& points) {
   GeometricPrimitives gp = GeometricPrimitives();
 
   gp.pointcloud = std::make_shared<nanoflann::PointCloud<float>>();
@@ -273,8 +272,7 @@ GeometricPrimitives GeometricPrimitives::create_convexpolytope(Matrix4f htm,
 
   gp.points_gp = get_vertex(A_mod, b_mod);
 
-  if (gp.points_gp.size() == 0)
-    throw std::runtime_error("Polytope is empty!");
+  if (gp.points_gp.size() == 0) throw std::runtime_error("Polytope is empty!");
 
   // Check if the polytope is unbounded
   VectorXf ex_p = solveQP(Matrix3f::Identity() / VERYBIGNUMBER,
@@ -350,7 +348,6 @@ GeometricPrimitives GeometricPrimitives::create_convexpolytope(Matrix4f htm,
 
 GeometricPrimitives generate_point_cloud_sphere(float radius, Matrix4f htm,
                                                 float delta) {
-
   vector<Vector3f> points;
   Vector3f ptemp;
   Vector3f p = htm.block<3, 1>(0, 3);
@@ -380,7 +377,6 @@ GeometricPrimitives generate_point_cloud_sphere(float radius, Matrix4f htm,
 GeometricPrimitives generate_point_cloud_box(float width, float depth,
                                              float height, Matrix4f htm,
                                              float delta) {
-
   vector<Vector3f> points;
   Vector3f ptemp;
   Matrix3f Q = htm.block<3, 3>(0, 0);
@@ -456,7 +452,6 @@ GeometricPrimitives generate_point_cloud_box(float width, float depth,
 
 GeometricPrimitives generate_point_cloud_cylinder(float radius, float height,
                                                   Matrix4f htm, float delta) {
-
   vector<Vector3f> points;
   Vector3f ptemp;
   Matrix3f Q = htm.block<3, 3>(0, 0);
@@ -502,10 +497,9 @@ GeometricPrimitives generate_point_cloud_cylinder(float radius, float height,
   return GeometricPrimitives::create_pointcloud(points);
 }
 
-GeometricPrimitives
-generate_point_cloud_convexpolygon(const vector<Vector3f> &vertices,
-                                   const MatrixXf &A, const VectorXf &b,
-                                   const MatrixXf &htm, float disc) {
+GeometricPrimitives generate_point_cloud_convexpolygon(
+    const vector<Vector3f>& vertices, const MatrixXf& A, const VectorXf& b,
+    const MatrixXf& htm, float disc) {
   vector<Vector3f> all_face_points;
   const float eps = 1e-6f;
 
@@ -517,13 +511,11 @@ generate_point_cloud_convexpolygon(const vector<Vector3f> &vertices,
     float bi = b(i);
 
     vector<Vector3f> face_vertices;
-    for (const auto &v : vertices) {
-      if (fabs(a.dot(v) - bi) < eps)
-        face_vertices.push_back(v);
+    for (const auto& v : vertices) {
+      if (fabs(a.dot(v) - bi) < eps) face_vertices.push_back(v);
     }
 
-    if (face_vertices.empty())
-      continue;
+    if (face_vertices.empty()) continue;
 
     Vector3f n = a.normalized();
     Vector3f arbitrary =
@@ -537,23 +529,18 @@ generate_point_cloud_convexpolygon(const vector<Vector3f> &vertices,
     float v_min = numeric_limits<float>::max(),
           v_max = numeric_limits<float>::lowest();
 
-    for (const auto &v : face_vertices) {
+    for (const auto& v : face_vertices) {
       Vector3f diff = v - origin;
       float u = diff.dot(d1);
       float v_coord = diff.dot(d2);
-      if (u < u_min)
-        u_min = u;
-      if (u > u_max)
-        u_max = u;
-      if (v_coord < v_min)
-        v_min = v_coord;
-      if (v_coord > v_max)
-        v_max = v_coord;
+      if (u < u_min) u_min = u;
+      if (u > u_max) u_max = u;
+      if (v_coord < v_min) v_min = v_coord;
+      if (v_coord > v_max) v_max = v_coord;
     }
 
     for (float u = u_min; u <= u_max + eps; u += disc) {
       for (float v_coord = v_min; v_coord <= v_max + eps; v_coord += disc) {
-
         Vector3f candidate = origin + u * d1 + v_coord * d2;
         bool inside = true;
         for (int j = 0; j < A.rows(); j++) {
@@ -584,27 +571,28 @@ inline double smf(double x, int order, double h) {
 
   if (h == 0) {
     switch (order) {
-    case 2:
-      return 1;
-    case 1:
-      return x;
-    case 0:
-      return 0.5 * x * x;
-    default:
-      throw std::invalid_argument("Invalid order. Must be 0, 1, or 2.");
+      case 2:
+        return 1;
+      case 1:
+        return x;
+      case 0:
+        return 0.5 * x * x;
+      default:
+        throw std::invalid_argument("Invalid order. Must be 0, 1, or 2.");
     }
   } else {
     switch (order) {
-    case 2:
-      return 1.0 - std::pow(x + 1, -1.0 / h);
-    case 1:
-      return x - (h / (h - 1)) * (std::pow(x + 1, 1.0 - 1.0 / h) - 1);
-    case 0:
-      return 0.5 * x * x -
-             (h / (h - 1)) *
-                 ((h / (2 * h - 1)) * (std::pow(x + 1, 2.0 - 1.0 / h) - 1) - x);
-    default:
-      throw std::invalid_argument("Invalid order. Must be 0, 1, or 2.");
+      case 2:
+        return 1.0 - std::pow(x + 1, -1.0 / h);
+      case 1:
+        return x - (h / (h - 1)) * (std::pow(x + 1, 1.0 - 1.0 / h) - 1);
+      case 0:
+        return 0.5 * x * x -
+               (h / (h - 1)) *
+                   ((h / (2 * h - 1)) * (std::pow(x + 1, 2.0 - 1.0 / h) - 1) -
+                    x);
+      default:
+        throw std::invalid_argument("Invalid order. Must be 0, 1, or 2.");
     }
   }
 }
@@ -741,7 +729,6 @@ ProjResult projection_pointcloud(KDTree tree, PointCloud pc, Vector3f point,
 
     return pr;
   } else {
-
     float min_dist = projection_pointcloud(tree, pc, point, 0, 0).dist;
     float tol = 1e-3;
     float threshold = min_dist / pow(tol, h);
@@ -843,14 +830,10 @@ ProjResult projection_convexpolytope(MatrixXf A, VectorXf b, Matrix4f htm,
 }
 
 GeometricPrimitives GeometricPrimitives::to_pointcloud(float disc) const {
-  if (type == 0)
-    return generate_point_cloud_sphere(lx, htm, disc);
-  if (type == 1)
-    return generate_point_cloud_box(lx, ly, lz, htm, disc);
-  if (type == 2)
-    return generate_point_cloud_cylinder(lx, lz, htm, disc);
-  if (type == 3)
-    return this->copy();
+  if (type == 0) return generate_point_cloud_sphere(lx, htm, disc);
+  if (type == 1) return generate_point_cloud_box(lx, ly, lz, htm, disc);
+  if (type == 2) return generate_point_cloud_cylinder(lx, lz, htm, disc);
+  if (type == 3) return this->copy();
   if (type == 4)
     return generate_point_cloud_convexpolygon(points_gp, A, b, htm, disc);
 }
@@ -958,16 +941,11 @@ Vector3f support_pointcloud(Vector3f direction, vector<Vector3f> points) {
 }
 
 Vector3f GeometricPrimitives::support(Vector3f direction) const {
-  if (type == 0)
-    return support_sphere(direction, lx, htm);
-  if (type == 1)
-    return support_box(direction, lx, ly, lz, htm);
-  if (type == 2)
-    return support_cylinder(direction, lx, lz, htm);
-  if (type == 3)
-    return support_pointcloud(direction, points_gp);
-  if (type == 4)
-    return support_convexpolygon(direction, points_gp, htm);
+  if (type == 0) return support_sphere(direction, lx, htm);
+  if (type == 1) return support_box(direction, lx, ly, lz, htm);
+  if (type == 2) return support_cylinder(direction, lx, lz, htm);
+  if (type == 3) return support_pointcloud(direction, points_gp);
+  if (type == 4) return support_convexpolygon(direction, points_gp, htm);
 }
 
 float max4(float a1, float a2, float a3, float a4) {
@@ -978,7 +956,7 @@ float max4(float a1, float a2, float a3, float a4) {
 
 AABB::AABB() {}
 
-AABB AABB::get_aabb_pointcloud(const vector<Vector3f> &points, int start,
+AABB AABB::get_aabb_pointcloud(const vector<Vector3f>& points, int start,
                                int end) {
   Vector3f minPoint = points[start];
   Vector3f maxPoint = points[start];
@@ -998,7 +976,6 @@ AABB AABB::get_aabb_pointcloud(const vector<Vector3f> &points, int start,
 }
 
 AABB GeometricPrimitives::get_aabb() const {
-
   Vector3f x = htm.block(0, 0, 3, 1);
   Vector3f y = htm.block(0, 1, 3, 1);
   Vector3f z = htm.block(0, 2, 3, 1);
@@ -1015,7 +992,6 @@ AABB GeometricPrimitives::get_aabb() const {
   }
 
   if (type == 1) {
-
     Vector3f p1 = this->lx * x + this->ly * y + this->lz * z;
     Vector3f p2 = -this->lx * x + this->ly * y + this->lz * z;
     Vector3f p3 = this->lx * x - this->ly * y + this->lz * z;
@@ -1102,7 +1078,7 @@ float AABB::dist_aabb(AABB aabb1, AABB aabb2) {
 
 BVH::BVH() {}
 
-int BVH::build_bvh(BVH &bvh, vector<Vector3f> &points, int start, int end,
+int BVH::build_bvh(BVH& bvh, vector<Vector3f>& points, int start, int end,
                    int parentIndex) {
   AABB nodeAABB = AABB::get_aabb_pointcloud(points, start, end);
 
@@ -1121,13 +1097,11 @@ int BVH::build_bvh(BVH &bvh, vector<Vector3f> &points, int start, int end,
   Vector3f size(bvh.aabb[nodeIndex].lx, bvh.aabb[nodeIndex].ly,
                 bvh.aabb[nodeIndex].lz);
   int axis = 0;
-  if (size.y() > size.x())
-    axis = 1;
-  if (size.z() > size[axis])
-    axis = 2;
+  if (size.y() > size.x()) axis = 1;
+  if (size.z() > size[axis]) axis = 2;
 
   sort(points.begin() + start, points.begin() + end,
-       [axis](const Vector3f &a, const Vector3f &b) {
+       [axis](const Vector3f& a, const Vector3f& b) {
          return a[axis] < b[axis];
        });
 
@@ -1146,14 +1120,12 @@ int BVH::build_bvh(BVH &bvh, vector<Vector3f> &points, int start, int end,
   return nodeIndex;
 }
 
-BVH::BVH(vector<Vector3f> &points) {
-  if (points.empty())
-    return;
+BVH::BVH(vector<Vector3f>& points) {
+  if (points.empty()) return;
   build_bvh(*this, points, 0, points.size(), -1);
 }
 
-void tvec(Vector3f v, float *vf) {
-
+void tvec(Vector3f v, float* vf) {
   vf[0] = v[0];
   vf[1] = v[1];
   vf[2] = v[2];
@@ -1166,8 +1138,7 @@ string pmat(Matrix4f m) {
     s += "[";
     for (int j = 0; j < 4; j++) {
       s += print_number(m(i, j), 8);
-      if (j < 3)
-        s += ",";
+      if (j < 3) s += ",";
     }
     if (i < 3)
       s += "],";
@@ -1179,9 +1150,9 @@ string pmat(Matrix4f m) {
   return s;
 }
 
-QueueElement eval_node(int index, const GeometricPrimitives &prim,
-                       const AABB &prim_aabb, const BVH &bvh,
-                       PrimDistResult &bestResult) {
+QueueElement eval_node(int index, const GeometricPrimitives& prim,
+                       const AABB& prim_aabb, const BVH& bvh,
+                       PrimDistResult& bestResult) {
   QueueElement qe;
   qe.nodeIndex = index;
 
@@ -1205,7 +1176,7 @@ QueueElement eval_node(int index, const GeometricPrimitives &prim,
   }
 }
 
-PrimDistResult dist_to_bvh(const GeometricPrimitives &prim, const BVH &bvh) {
+PrimDistResult dist_to_bvh(const GeometricPrimitives& prim, const BVH& bvh) {
   // Min priority queue (min-heap) for best-first traversal
   priority_queue<QueueElement, vector<QueueElement>, greater<QueueElement>> pq;
 
@@ -1214,12 +1185,11 @@ PrimDistResult dist_to_bvh(const GeometricPrimitives &prim, const BVH &bvh) {
   bestResult.dist = VERYBIGNUMBER;
 
   // Start with the root node
-  if (bvh.aabb.empty())
-    return bestResult;
+  if (bvh.aabb.empty()) return bestResult;
 
   AABB prim_aabb = prim.get_aabb();
 
-  pq.push(eval_node(0, prim, prim_aabb, bvh, bestResult)); // Root node
+  pq.push(eval_node(0, prim, prim_aabb, bvh, bestResult));  // Root node
 
   while (!pq.empty()) {
     // Get the closest node from the queue
@@ -1229,8 +1199,7 @@ PrimDistResult dist_to_bvh(const GeometricPrimitives &prim, const BVH &bvh) {
     int nodeIndex = current.nodeIndex;
 
     // Prune
-    if (current.dist >= bestResult.dist)
-      continue;
+    if (current.dist >= bestResult.dist) continue;
 
     // Otherwise
     if (bvh.left_child[nodeIndex] != -1)
@@ -1244,9 +1213,9 @@ PrimDistResult dist_to_bvh(const GeometricPrimitives &prim, const BVH &bvh) {
   return bestResult;
 }
 
-QueueElement eval_node_range(int index, const GeometricPrimitives &prim,
-                             const AABB &prim_aabb, const BVH &bvh,
-                             vector<Vector3f> &result, float threshold) {
+QueueElement eval_node_range(int index, const GeometricPrimitives& prim,
+                             const AABB& prim_aabb, const BVH& bvh,
+                             vector<Vector3f>& result, float threshold) {
   QueueElement qe;
   qe.nodeIndex = index;
 
@@ -1256,8 +1225,7 @@ QueueElement eval_node_range(int index, const GeometricPrimitives &prim,
     qe.proj_A = bvh.aabb[index].p;
     qe.proj_B = pr.proj;
 
-    if (pr.dist <= threshold)
-      result.push_back(bvh.aabb[index].p);
+    if (pr.dist <= threshold) result.push_back(bvh.aabb[index].p);
 
     return qe;
   } else {
@@ -1268,10 +1236,10 @@ QueueElement eval_node_range(int index, const GeometricPrimitives &prim,
   }
 }
 
-vector<Vector3f> dist_to_bvh_range(const GeometricPrimitives &prim,
-                                   const BVH &bvh, float threshold) {
+vector<Vector3f> dist_to_bvh_range(const GeometricPrimitives& prim,
+                                   const BVH& bvh, float threshold) {
   vector<Vector3f> result =
-      {}; // Stores the points in leaf nodes that satisfy the condition
+      {};  // Stores the points in leaf nodes that satisfy the condition
 
   // Min priority queue (min-heap) for best-first traversal
   priority_queue<QueueElement, vector<QueueElement>, greater<QueueElement>> pq;
@@ -1283,11 +1251,10 @@ vector<Vector3f> dist_to_bvh_range(const GeometricPrimitives &prim,
   AABB prim_aabb = prim.get_aabb();
 
   // Start with the root node
-  if (bvh.aabb.empty())
-    return result;
+  if (bvh.aabb.empty()) return result;
 
-  pq.push(
-      eval_node_range(0, prim, prim_aabb, bvh, result, threshold)); // Root node
+  pq.push(eval_node_range(0, prim, prim_aabb, bvh, result,
+                          threshold));  // Root node
 
   while (!pq.empty()) {
     // Get the closest node from the queue
@@ -1297,8 +1264,7 @@ vector<Vector3f> dist_to_bvh_range(const GeometricPrimitives &prim,
     int nodeIndex = current.nodeIndex;
 
     // Prune
-    if (current.dist > threshold)
-      continue;
+    if (current.dist > threshold) continue;
 
     // cout << "Creating descendants..."<<std::endl;
     // Otherwise
@@ -1313,13 +1279,13 @@ vector<Vector3f> dist_to_bvh_range(const GeometricPrimitives &prim,
   return result;
 }
 
-PrimDistResult dist_to_bvh_smooth(const GeometricPrimitives &prim, int pc_size,
-                                  const BVH &bvh, float h, float eps) {
+PrimDistResult dist_to_bvh_smooth(const GeometricPrimitives& prim, int pc_size,
+                                  const BVH& bvh, float h, float eps) {
   PrimDistResult pdr;
 
   float min_dist = dist_to_bvh(prim, bvh).dist;
 
-  float tol = 0.05; // 1e-3
+  float tol = 0.05;  // 1e-3
   float threshold = min_dist / pow(tol, h);
 
   vector<Vector3f> all_points = dist_to_bvh_range(prim, bvh, threshold);
@@ -1368,8 +1334,8 @@ PrimDistResult dist_to_bvh_smooth(const GeometricPrimitives &prim, int pc_size,
   return pdr;
 }
 
-PrimDistResult dist_to_gjk(const GeometricPrimitives &objA,
-                           const GeometricPrimitives &objB) {
+PrimDistResult dist_to_gjk(const GeometricPrimitives& objA,
+                           const GeometricPrimitives& objB) {
   // Implemented by
   // https://gist.github.com/vurtun/29727217c269a2fbf4c0ed9a1d11cb40
 
@@ -1379,7 +1345,6 @@ PrimDistResult dist_to_gjk(const GeometricPrimitives &objA,
   struct gjk_simplex gsx;
 
   while (cont) {
-
     Vector3f da = Vector3f::Random();
     Vector3f db = Vector3f::Random();
 
@@ -1467,7 +1432,6 @@ PrimDistResult GeometricPrimitives::dist_to(GeometricPrimitives prim, float h,
       // Call GJK
       return dist_to_gjk(*this, prim);
     else {
-
       if (type == 3 && prim.type == 3) {
         // Both are point clouds, and no smoothing is required
         // Use brute force with one of the KD-Trees...
@@ -1494,7 +1458,6 @@ PrimDistResult GeometricPrimitives::dist_to(GeometricPrimitives prim, float h,
       // Call the generalized alternating projection (gap)
       return dist_to_gap(*this, prim, h, eps, tol, no_iter_max, p_A0);
     else {
-
       if (type == 3 && prim.type == 3) {
         // Both are point clouds, and smoothing is required
         throw std::runtime_error(
@@ -1522,18 +1485,14 @@ PrimDistResult GeometricPrimitives::dist_to(GeometricPrimitives prim, float h,
 }
 
 GeometricPrimitives GeometricPrimitives::copy() const {
-  if (type == 0)
-    return GeometricPrimitives::create_sphere(htm, lx);
-  if (type == 1)
-    return GeometricPrimitives::create_box(htm, lx, ly, lz);
-  if (type == 2)
-    return GeometricPrimitives::create_cylinder(htm, lx, lz);
+  if (type == 0) return GeometricPrimitives::create_sphere(htm, lx);
+  if (type == 1) return GeometricPrimitives::create_box(htm, lx, ly, lz);
+  if (type == 2) return GeometricPrimitives::create_cylinder(htm, lx, lz);
   if (type == 3) {
     vector<Vector3f> points = points_gp;
     return GeometricPrimitives::create_pointcloud(points);
   }
-  if (type == 4)
-    return GeometricPrimitives::create_convexpolytope(htm, A, b);
+  if (type == 4) return GeometricPrimitives::create_convexpolytope(htm, A, b);
 }
 
 string PrimDistResult::toString() const {
@@ -1564,8 +1523,7 @@ string print_no_link(int ind_link) {
   int dig = (ind_link == 0) ? 1 : 1 + (int)floor(log10((float)ind_link));
 
   string str = std::to_string(ind_link);
-  for (int i = 0; i < dig_tot - dig; i++)
-    str += " ";
+  for (int i = 0; i < dig_tot - dig; i++) str += " ";
 
   return str;
 }
@@ -1663,8 +1621,7 @@ void Manipulator::add_tube_coord(int ind_link, Vector3f coord) {
   int last_ind_link = -1;
 
   for (int ind_link = 0; ind_link < no_links; ind_link++)
-    if (coord_tube[ind_link].size() > 0)
-      last_ind_link = ind_link;
+    if (coord_tube[ind_link].size() > 0) last_ind_link = ind_link;
 
   if (last_ind_link >= 0) {
     if (ind_link < last_ind_link)
@@ -1722,8 +1679,8 @@ void Manipulator::set_htm_extra(Matrix4f _htm_world_to_dh0,
 
 Manipulator::Manipulator() {};
 
-vector<FKResult> Manipulator::fk(const vector<VectorXf> &q,
-                                 const vector<Matrix4f> &htm_world_base,
+vector<FKResult> Manipulator::fk(const vector<VectorXf>& q,
+                                 const vector<Matrix4f>& htm_world_base,
                                  bool compute_jac) const {
   int no_q = q.size();
   vector<FKResult> fkres_all(no_q);
@@ -1740,7 +1697,6 @@ vector<FKResult> Manipulator::fk(const vector<VectorXf> &q,
 
     // Compute the forward kinematic
     for (int ind_links = 0; ind_links < no_links; ind_links++) {
-
       Matrix4f trns = Matrix4f::Identity();
       float c_theta = (joint_type[ind_links] == 0) ? cosf(q[ind_q][ind_links])
                                                    : dh_cos_theta[ind_links];
@@ -1821,10 +1777,8 @@ FKResult Manipulator::fk(VectorXf q, Matrix4f htm_world_base,
   return fk_res[0];
 }
 
-vector<FKPrimResult>
-Manipulator::fk_prim(const vector<VectorXf> &q,
-                     const vector<FKResult> &fk_res_all) const {
-
+vector<FKPrimResult> Manipulator::fk_prim(
+    const vector<VectorXf>& q, const vector<FKResult>& fk_res_all) const {
   int no_q = q.size();
   vector<FKPrimResult> fkres_prim_all(no_q);
 
@@ -2013,7 +1967,6 @@ CheckFreeConfigResult Manipulator::check_free_configuration(
         if (objects_links[ind_tot]
                 .dist_to(obstacles[ind_obst], 1e-6, 1e-6, tol, no_iter_max)
                 .dist < dist_tol) {
-
           cfcr.isfree = false;
           cfcr.message = "Collision between link " + std::to_string(ind_link) +
                          " (col object " + std::to_string(ind_obj_links) +
@@ -2036,10 +1989,8 @@ CheckFreeConfigResult Manipulator::check_free_configuration(
         int ind_obj_links_B = list_ind_obj_links[ind_tot_B];
 
         if (ind_link_B > ind_link_A + 1) {
-
           if (AABB::dist_aabb(objects_links_aabb[ind_tot_A],
                               objects_links_aabb[ind_tot_B]) == 0) {
-
             if (objects_links[ind_tot_A]
                     .dist_to(objects_links[ind_tot_B], 1e-6, 1e-6, tol,
                              no_iter_max)
@@ -2113,7 +2064,6 @@ DistStructRobotObj Manipulator::compute_dist(GeometricPrimitives obj,
 
     for (int ind_obj_link = 0; ind_obj_link < geo_prim[ind_links].size();
          ind_obj_link++) {
-
       GeometricPrimitives obj_copy = geo_prim[ind_links][ind_obj_link].copy();
       obj_copy.htm =
           fkres.htm_dh[ind_links] * geo_prim[ind_links][ind_obj_link].htm;
@@ -2131,7 +2081,7 @@ DistStructRobotObj Manipulator::compute_dist(GeometricPrimitives obj,
             else
               p_obj_0 = obj.htm.block(0, 0, 3, 1);
 
-          } catch (const std::exception &e) {
+          } catch (const std::exception& e) {
             p_obj_0 = obj.htm.block(0, 0, 3, 1);
           }
         }
@@ -2179,9 +2129,10 @@ DistStructRobotObj Manipulator::compute_dist(GeometricPrimitives obj,
   return dsro;
 }
 
-DistStructRobotObj
-Manipulator::signedDistance(GeometricPrimitives obj, VectorXf q, Matrix4f htm,
-                            float max_dist, float r) const {
+DistStructRobotObj Manipulator::signedDistance(GeometricPrimitives obj,
+                                               VectorXf q, Matrix4f htm,
+                                               float max_dist, float r,
+                                               bool isConservative) const {
   FKResult fkres = fk(q, htm, true);
 
   AABB obj_aabb = obj.get_aabb();
@@ -2203,29 +2154,48 @@ Manipulator::signedDistance(GeometricPrimitives obj, VectorXf q, Matrix4f htm,
 
     for (int ind_obj_link = 0; ind_obj_link < geo_prim[ind_links].size();
          ind_obj_link++) {
-
       GeometricPrimitives collisionObj =
           geo_prim[ind_links][ind_obj_link].copy();
       collisionObj.htm =
           fkres.htm_dh[ind_links] * geo_prim[ind_links][ind_obj_link].htm;
 
       if (AABB::dist_aabb(collisionObj.get_aabb(), obj_aabb) < max_dist) {
-        tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf> res =
-            distBox2Box(collisionObj, obj, r);
+        std::vector<Eigen::Vector3f> P = getBoxVertices(collisionObj);
+        std::vector<Eigen::Vector3f> B = getBoxVertices(obj);
+        tuple<std::vector<Eigen::Vector3f>, std::vector<Eigen::Vector3f>,
+              std::vector<Eigen::Vector3f>>
+            normalsTuple =
+                getCandidateNormals(collisionObj, obj, isConservative);
+        std::vector<Eigen::Vector3f> normalsColObj = get<0>(normalsTuple);
+        std::vector<Eigen::Vector3f> normalsEdges = get<1>(normalsTuple);
+        std::vector<Eigen::Vector3f> normalsObj = get<2>(normalsTuple);
+        // std::vector<Eigen::Vector3f> normalsColObj =
+        //     getNormalsVectors(collisionObj);
+        // std::vector<Eigen::Vector3f> normalsObj = getNormalsVectors(obj);
+        int numNormalsColObj =
+            normalsColObj.size();  // depends only on the collision object
+        int numNormalsEdges = normalsEdges.size();  // depends on both objects
+        int numNormalsObj = normalsObj.size();  // depends only on the object
+        std::vector<Eigen::Vector3f> normalsSet;
+        normalsSet.insert(normalsSet.end(), normalsColObj.begin(),
+                          normalsColObj.end());
+        // if conservative case, then edgeNormals is empty, so this will not add
+        // anything
+        normalsSet.insert(normalsSet.end(), normalsEdges.begin(),
+                          normalsEdges.end());
+        normalsSet.insert(normalsSet.end(), normalsObj.begin(),
+                          normalsObj.end());
+
+        tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf,
+              Eigen::MatrixXf>
+            res = distSet2Set(P, B, normalsColObj, normalsObj, r);
         // PrimDistResult pdr = obj.dist_to(obj_copy, h, eps, tol,
         // no_iter_max, p_obj_0);
         float dist = get<0>(res);
-        std::vector<Eigen::Vector3f> P = getBoxVertices(collisionObj);
-        std::vector<Eigen::Vector3f> normalsColObj = getNormalsVectors(collisionObj);
-        std::vector<Eigen::Vector3f> normalsObj = getNormalsVectors(obj);
-        std::vector<Eigen::Vector3f> normalsSet;
-        normalsSet.insert(normalsSet.end(), normalsColObj.begin(), normalsColObj.end());
-        normalsSet.insert(normalsSet.end(), normalsObj.begin(), normalsObj.end());
-
         VectorXf grad = get<1>(res);
         // Each row is a 1 x 3 gradient for every vertex of each object
         MatrixXf gradCollisionObj = get<2>(
-            res); // |P| x 3, where P are the vertices of the collision object
+            res);  // |P| x 3, where P are the vertices of the collision object
         MatrixXf gradObj = get<3>(res);
         MatrixXf gradNormals = get<4>(res);
 
@@ -2236,9 +2206,9 @@ Manipulator::signedDistance(GeometricPrimitives obj, VectorXf q, Matrix4f htm,
         dslo_new.link_number = ind_links;
         dslo_new.link_col_obj_number = ind_obj_link;
         dslo_new.point_object =
-            Eigen::Vector3f::Zero(); // Not computed in this case
+            Eigen::Vector3f::Zero();  // Not computed in this case
         dslo_new.point_link =
-            Eigen::Vector3f::Zero(); // Not computed in this case
+            Eigen::Vector3f::Zero();  // Not computed in this case
 
         // Compute the gradient of the distance dDdq:
         // dDdq = sum_{p \in P} dD/dp * dp/dq + sum_{n \in N} dD/dn * dn/dq
@@ -2248,18 +2218,23 @@ Manipulator::signedDistance(GeometricPrimitives obj, VectorXf q, Matrix4f htm,
           // gradCollisionObj.row(i) is the gradient for vertex i of the
           // collision object
           Vector3f pi = P[i];
-          MatrixXf JvAtColVertex = Jv_aux - s_mat(pi) * Jw; // dp/dq
-          // Contribution of vertex i to the gradient of the distance with respect to q
-          dDdq_wrtP += gradCollisionObj.row(i) * JvAtColVertex; 
+          MatrixXf JvAtColVertex = Jv_aux - s_mat(pi) * Jw;  // dp/dq
+          // Contribution of vertex i to the gradient of the distance with
+          // respect to q
+          dDdq_wrtP += gradCollisionObj.row(i) * JvAtColVertex;
         }
-        // Loop over normal vectors in N which belong to P (ColObj) (Only these are dependent on q)
+        // Loop over normal vectors in N which belong to P (ColObj) (Only these
+        // are dependent on q)
         Eigen::RowVectorXf dDdq_wrtN = Eigen::RowVectorXf::Zero(q.rows());
-        for (int i = 0; i < normalsColObj.size(); i++) {
-        // for (int i = 0; i < gradNormals.rows(); i++) {
-          // Vector3f ni = Ri * normalsSet[i].normalized(); // normal vector i expressed in world coordinates
-          Vector3f ni = normalsSet[i].normalized(); // normal vector i expressed in world coordinates
-          MatrixXf JwAtNormal = -s_mat(ni) * Jw; // dn/dq
-          dDdq_wrtN += gradNormals.row(i) * JwAtNormal; 
+        for (int i = 0; i < numNormalsColObj + numNormalsEdges; i++) {
+          // for (int i = 0; i < gradNormals.rows(); i++) {
+          // Vector3f ni = Ri * normalsSet[i].normalized(); // normal vector i
+          // expressed in world coordinates
+          Vector3f ni =
+              normalsSet[i].normalized();         // normal vector i expressed
+                                                  // in world coordinates
+          MatrixXf JwAtNormal = -s_mat(ni) * Jw;  // dn/dq
+          dDdq_wrtN += gradNormals.row(i) * JwAtNormal;
         }
         Eigen::RowVectorXf dDdq = dDdq_wrtP + dDdq_wrtN;
         dslo_new.jac_distance = dDdq;
@@ -2280,47 +2255,52 @@ Manipulator::signedDistance(GeometricPrimitives obj, VectorXf q, Matrix4f htm,
 
   dsro.jac_dist_mat = jac_tot;
   dsro.dist_vect = dist_tot;
-  // ========== DEBUG: Numerical Jacobian Check ==========
-  const float eps = 1e-4f;
-  const int n_q = q.rows();
-  const int n_rows = jac_tot.rows();
-
-  // Lambda that computes only distances (no gradients) for all collision primitives,
-  // preserving the exact same order as jac_tot rows.
-  auto computeDistancesOnly = [&](const Eigen::VectorXf& q_query) -> Eigen::VectorXf {
-      FKResult fk_query = fk(q_query, htm, false);  // false = skip Jacobian computation for speed
-      Eigen::VectorXf dists(n_rows);
-      int row_idx = 0;
-      for (int ind_links = 0; ind_links < no_links; ++ind_links) {
-          Matrix4f htm_link = fk_query.htm_dh[ind_links];
-          for (int ind_obj_link = 0; ind_obj_link < geo_prim[ind_links].size(); ++ind_obj_link) {
-              GeometricPrimitives col_obj = geo_prim[ind_links][ind_obj_link].copy();
-              col_obj.htm = htm_link * geo_prim[ind_links][ind_obj_link].htm;
-              if (AABB::dist_aabb(col_obj.get_aabb(), obj_aabb) < max_dist) {
-                  dists[row_idx] = std::get<0>(distBox2Box(col_obj, obj, r));
-              } else {
-                  dists[row_idx] = max_dist;  // treat far objects as clamped distance
-              }
-              ++row_idx;
-          }
-      }
-      return dists;
-  };
-
-  Eigen::VectorXf d0 = computeDistancesOnly(q);
-  Eigen::MatrixXf num_jac(n_rows, n_q);
-  for (int j = 0; j < n_q; ++j) {
-      Eigen::VectorXf q_plus = q;   q_plus(j) += eps;
-      Eigen::VectorXf q_minus = q;  q_minus(j) -= eps;
-      Eigen::VectorXf d_plus  = computeDistancesOnly(q_plus);
-      Eigen::VectorXf d_minus = computeDistancesOnly(q_minus);
-      num_jac.col(j) = (d_plus - d_minus) / (2.0f * eps);
-  }
-
-  std::cout << "[DEBUG] Analytical Jacobian (jac_tot):\n" << jac_tot << std::endl;
-  std::cout << "[DEBUG] Numerical Jacobian:\n" << num_jac << std::endl;
-  std::cout << "[DEBUG] Difference (Analytical - Numerical):\n" << (jac_tot - num_jac) << std::endl;
-  // ======================================================
+  // // ========== DEBUG: Numerical Jacobian Check ==========
+  // const float eps = 1e-4f;
+  // const int n_q = q.rows();
+  // const int n_rows = jac_tot.rows();
+  //
+  // // Lambda that computes only distances (no gradients) for all collision
+  // primitives,
+  // // preserving the exact same order as jac_tot rows.
+  // auto computeDistancesOnly = [&](const Eigen::VectorXf& q_query) ->
+  // Eigen::VectorXf {
+  //     FKResult fk_query = fk(q_query, htm, false);  // false = skip Jacobian
+  //     computation for speed Eigen::VectorXf dists(n_rows); int row_idx = 0;
+  //     for (int ind_links = 0; ind_links < no_links; ++ind_links) {
+  //         Matrix4f htm_link = fk_query.htm_dh[ind_links];
+  //         for (int ind_obj_link = 0; ind_obj_link <
+  //         geo_prim[ind_links].size(); ++ind_obj_link) {
+  //             GeometricPrimitives col_obj =
+  //             geo_prim[ind_links][ind_obj_link].copy(); col_obj.htm =
+  //             htm_link * geo_prim[ind_links][ind_obj_link].htm; if
+  //             (AABB::dist_aabb(col_obj.get_aabb(), obj_aabb) < max_dist) {
+  //                 dists[row_idx] = std::get<0>(distSet2Set(col_obj, obj, r));
+  //             } else {
+  //                 dists[row_idx] = max_dist;  // treat far objects as clamped
+  //                 distance
+  //             }
+  //             ++row_idx;
+  //         }
+  //     }
+  //     return dists;
+  // };
+  //
+  // Eigen::VectorXf d0 = computeDistancesOnly(q);
+  // Eigen::MatrixXf num_jac(n_rows, n_q);
+  // for (int j = 0; j < n_q; ++j) {
+  //     Eigen::VectorXf q_plus = q;   q_plus(j) += eps;
+  //     Eigen::VectorXf q_minus = q;  q_minus(j) -= eps;
+  //     Eigen::VectorXf d_plus  = computeDistancesOnly(q_plus);
+  //     Eigen::VectorXf d_minus = computeDistancesOnly(q_minus);
+  //     num_jac.col(j) = (d_plus - d_minus) / (2.0f * eps);
+  // }
+  //
+  // std::cout << "[DEBUG] Analytical Jacobian (jac_tot):\n" << jac_tot <<
+  // std::endl; std::cout << "[DEBUG] Numerical Jacobian:\n" << num_jac <<
+  // std::endl; std::cout << "[DEBUG] Difference (Analytical - Numerical):\n" <<
+  // (jac_tot - num_jac) << std::endl;
+  // // ======================================================
 
   return dsro;
 }
@@ -2346,10 +2326,9 @@ DistStructLinkLink DistStructRobotAuto::get_item(int ind_link_1, int ind_link_2,
 
 DistStructRobotAuto::DistStructRobotAuto() {};
 
-DistStructRobotAuto
-Manipulator::compute_dist_auto(VectorXf q, DistStructRobotAuto old_dist_struct,
-                               float tol, int no_iter_max, float max_dist,
-                               float h, float eps) const {
+DistStructRobotAuto Manipulator::compute_dist_auto(
+    VectorXf q, DistStructRobotAuto old_dist_struct, float tol, int no_iter_max,
+    float max_dist, float h, float eps) const {
   FKResult fkres = fk(q, this->htm_world_to_dh0, true);
 
   DistStructRobotAuto dsra;
@@ -2386,7 +2365,6 @@ Manipulator::compute_dist_auto(VectorXf q, DistStructRobotAuto old_dist_struct,
            ind_obj_link_1 < geo_prim[ind_links_1].size(); ind_obj_link_1++)
         for (int ind_obj_link_2 = 0;
              ind_obj_link_2 < geo_prim[ind_links_2].size(); ind_obj_link_2++) {
-
           GeometricPrimitives obj_copy_1 =
               geo_prim[ind_links_1][ind_obj_link_1].copy();
           obj_copy_1.htm = fkres.htm_dh[ind_links_1] *
@@ -2410,7 +2388,7 @@ Manipulator::compute_dist_auto(VectorXf q, DistStructRobotAuto old_dist_struct,
                   p_obj_1 = dsll.point_link_1;
                 else
                   p_obj_1 = obj_copy_1.htm.block(0, 0, 3, 1);
-              } catch (const std::exception &e) {
+              } catch (const std::exception& e) {
                 p_obj_1 = obj_copy_1.htm.block(0, 0, 3, 1);
               }
             }
@@ -2458,6 +2436,191 @@ Manipulator::compute_dist_auto(VectorXf q, DistStructRobotAuto old_dist_struct,
   return dsra;
 }
 
+DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
+                                                    float r,
+                                                    bool isConservative) const {
+  FKResult fkres = fk(q, this->htm_world_to_dh0, true);
+
+  DistStructRobotAuto dsra;
+  dsra.is_null = false;
+  dsra.list_info = {};
+
+  MatrixXf jac_tot = MatrixXf::Zero(0, q.rows());
+  VectorXf dist_tot = VectorXf::Zero(0);
+  int old_rows;
+
+  // List of linear velocity jacobians at displaced point
+  vector<MatrixXf> Jv_aux = vector<MatrixXf>();
+
+  for (int ind_links = 0; ind_links < no_links; ind_links++) {
+    MatrixXf Jv = fkres.jac_v_dh[ind_links];
+    MatrixXf Jw = fkres.jac_w_dh[ind_links];
+    Vector3f pc = fkres.get_p_dh(ind_links);
+    Jv_aux.push_back(Jv + s_mat(pc) * Jw);
+  }
+
+  for (int ind_links_1 = 0; ind_links_1 < no_links; ind_links_1++) {
+    MatrixXf Jv1 = fkres.jac_v_dh[ind_links_1];
+    MatrixXf Jw1 = fkres.jac_w_dh[ind_links_1];
+    Vector3f pc1 = fkres.get_p_dh(ind_links_1);
+    MatrixXf Jv_aux1 = Jv_aux[ind_links_1];
+
+    for (int ind_links_2 = ind_links_1 + 2; ind_links_2 < no_links;
+         ind_links_2++) {
+      MatrixXf Jv2 = fkres.jac_v_dh[ind_links_2];
+      MatrixXf Jw2 = fkres.jac_w_dh[ind_links_2];
+      Vector3f pc2 = fkres.get_p_dh(ind_links_2);
+      MatrixXf Jv_aux2 = Jv_aux[ind_links_2];
+
+      for (int ind_obj_link_1 = 0;
+           ind_obj_link_1 < geo_prim[ind_links_1].size(); ind_obj_link_1++)
+        for (int ind_obj_link_2 = 0;
+             ind_obj_link_2 < geo_prim[ind_links_2].size(); ind_obj_link_2++) {
+          GeometricPrimitives obj_copy_1 =
+              geo_prim[ind_links_1][ind_obj_link_1].copy();
+          obj_copy_1.htm = fkres.htm_dh[ind_links_1] *
+                           geo_prim[ind_links_1][ind_obj_link_1].htm;
+
+          GeometricPrimitives obj_copy_2 =
+              geo_prim[ind_links_2][ind_obj_link_2].copy();
+          obj_copy_2.htm = fkres.htm_dh[ind_links_2] *
+                           geo_prim[ind_links_2][ind_obj_link_2].htm;
+
+          if (AABB::dist_aabb(obj_copy_1.get_aabb(), obj_copy_2.get_aabb()) <
+              max_dist) {
+            std::vector<Eigen::Vector3f> P1 = getBoxVertices(obj_copy_1);
+            std::vector<Eigen::Vector3f> P2 = getBoxVertices(obj_copy_2);
+            tuple<std::vector<Eigen::Vector3f>, std::vector<Eigen::Vector3f>,
+                  std::vector<Eigen::Vector3f>>
+                normalsTuple =
+                    getCandidateNormals(obj_copy_1, obj_copy_2, isConservative);
+            std::vector<Eigen::Vector3f> normalsColObj1 = get<0>(normalsTuple);
+            std::vector<Eigen::Vector3f> normalsEdges = get<1>(normalsTuple);
+            std::vector<Eigen::Vector3f> normalsColObj2 = get<2>(normalsTuple);
+            // std::vector<Eigen::Vector3f> normalsColObj1 =
+            //     getNormalsVectors(obj_copy_1);
+            // std::vector<Eigen::Vector3f> normalsColObj2 =
+            //     getNormalsVectors(obj_copy_2);
+            int numNormalsColObj1 =
+                normalsColObj1.size();  // depends only on collision object 1
+            int numNormalsEdges =
+                normalsEdges.size();  // depends on both collision objects
+            int numNormalsColObj2 =
+                normalsColObj2.size();  // depends only on collision object 2
+            std::vector<Eigen::Vector3f> normalsSet;
+            normalsSet.insert(normalsSet.end(), normalsColObj1.begin(),
+                              normalsColObj1.end());
+            // if conservative case, then edgeNormals is empty, so this will not
+            // add anything
+            normalsSet.insert(normalsSet.end(), normalsEdges.begin(),
+                              normalsEdges.end());
+            normalsSet.insert(normalsSet.end(), normalsColObj2.begin(),
+                              normalsColObj2.end());
+
+            tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf,
+                  Eigen::MatrixXf>
+                res = distSet2Set(P1, P2, normalsColObj1, normalsColObj2, r);
+            float dist = get<0>(res);
+            VectorXf grad = get<1>(res);
+            // Each row is a 1 x 3 gradient for every vertex of each object
+            MatrixXf gradColObj1 =
+                get<2>(res);  // |P1| x 3, where P1 are the vertices of the
+                              // first collision object
+            MatrixXf gradColObj2 =
+                get<3>(res);  // |P2| x 3, where P2 are the vertices of the
+                              // second collision object
+            MatrixXf gradNormals = get<4>(res);
+
+            DistStructLinkLink dsll_new;
+
+            dsll_new.is_null = false;
+            dsll_new.distance = dist;
+            dsll_new.link_number_1 = ind_links_1;
+            dsll_new.link_number_2 = ind_links_2;
+            dsll_new.link_col_obj_number_1 = ind_obj_link_1;
+            dsll_new.link_col_obj_number_2 = ind_obj_link_2;
+            dsll_new.point_link_1 =
+                Eigen::Vector3f::Zero();  // Not computed in this case
+            dsll_new.point_link_2 =
+                Eigen::Vector3f::Zero();  // Not computed in this case
+
+            // Compute the gradient of the distance dDdq:
+            // dDdq = sum_{p \in P1} dD/dp * dp/dq + sum_{p \in P2} dD/dp *
+            // dp/dq + sum_{n \in N} dD/dn * dn/dq Loop over vertices of P1
+            Eigen::RowVectorXf dDdq_wrtP1 = Eigen::RowVectorf::Zero(q.rows());
+            for (int i = 0; i < P1.size(); i++) {
+              Vector3f pi = P1[i];
+              MatrixXf JvAtColVertex = Jv_aux1 - s_mat(pi) * Jw1;  // dp/dq
+              dDdq_wrtP1 +=
+                  gradColObj1.row(i) *
+                  JvAtColVertex;  // Contribution of vertex i of P1 to the
+                                  // gradient of the distance with respect to q
+            }
+            // Loop over vertices of P2
+            Eigen::RowVectorXf dDdq_wrtP2 = Eigen::RowVectorf::Zero(q.rows());
+            for (int i = 0; i < P2.size(); i++) {
+              Vector3f pi = P2[i];
+              MatrixXf JvAtColVertex = Jv_aux2 - s_mat(pi) * Jw2;  // dp/dq
+              dDdq_wrtP2 +=
+                  gradColObj2.row(i) *
+                  JvAtColVertex;  // Contribution of vertex i of P2 to the
+                                  // gradient of the distance with respect to q
+            }
+            // Loop over normal vectors in N which belong to P1 and P2 (ColObjs)
+            Eigen::RowVectorXf dDdq_wrtN = Eigen::RowVectorXf::Zero(q.rows());
+            for (int i = 0; i < gradNormals.rows(); i++) {
+              Vector3f ni =
+                  normalsSet[i].normalized();  // normal vector i expressed in
+                                               // world coordinates
+              // If i is within faces of ColObj1, then only jacobian Jw1 is
+              // used. If i is within faces of ColObj2, then only jacobian Jw2
+              // is used. If i is within edge normals, then both jacobians Jw1
+              // and Jw2 are used. This is because edge normals depend on the
+              // relative pose of both objects, so they are affected by the
+              // rotation of both objects jacobian Jw2 is used.
+              if (i < numNormalsColObj1) {
+                MatrixXf JwAtNormal = -s_mat(ni) * Jw1;  // dn/dq
+                dDdq_wrtN +=
+                    gradNormals.row(i) *
+                    JwAtNormal;  // Contribution of normal vector i to the
+                                 // gradient of the distance with respect to q
+              } else if (i < numNormalsColObj1 + numNormalsEdges) {
+                MatrixXf JwAtNormal = -s_mat(ni) * (Jw1 + Jw2);  // dn/dq
+                dDdq_wrtN +=
+                    gradNormals.row(i) *
+                    JwAtNormal;  // Contribution of normal vector i to the
+                                 // gradient of the distance with respect to q
+              } else {
+                MatrixXf JwAtNormal = -s_mat(ni) * Jw2;  // dn/dq
+                dDdq_wrtN +=
+                    gradNormals.row(i) *
+                    JwAtNormal;  // Contribution of normal vector i to the
+                                 // gradient of the distance with respect to q
+              }
+            }
+            Eigen::RowVectorXf dDdq = dDdq_wrtP1 + dDdq_wrtP2 + dDdq_wrtN;
+            dsll_new.jac_distance = dDdq;
+
+            old_rows = jac_tot.rows();
+            jac_tot.conservativeResize(old_rows + 1, Eigen::NoChange);
+            jac_tot.block(old_rows, 0, 1, dsll_new.jac_distance.cols()) =
+                dsll_new.jac_distance;
+
+            old_rows = dist_tot.rows();
+            dist_tot.conservativeResize(old_rows + 1, Eigen::NoChange);
+            dist_tot[old_rows] = pdr.dist;
+
+            dsra.list_info.push_back(dsll_new);
+          }
+        }
+    }
+  }
+
+  dsra.jac_dist_mat = jac_tot;
+  dsra.dist_vect = dist_tot;
+
+  return dsra;
+}
 // -----------------------------------------------------------------------------
 // ------------------------- VECTOR FIELD ON SE(3) -----------------------------
 // -----------------------------------------------------------------------------
@@ -2472,7 +2635,7 @@ double c_theta_zero = 1e-6;
 
 std::tuple<Eigen::Matrix3d, Eigen::Vector3d, Eigen::Matrix3d, double, double,
            double, double>
-EEdistSE3Variables(const Eigen::Matrix4d &X) {
+EEdistSE3Variables(const Eigen::Matrix4d& X) {
   // Compute the variables used in the explicit EEdistance function in SE(3)
   Eigen::MatrixXd Z = X;
   Eigen::Matrix3d Q = Z.block<3, 3>(0, 0);
@@ -2514,8 +2677,8 @@ double EEdistance(const Eigen::Matrix4d V, const Eigen::Matrix4d W) {
   return distance;
 }
 
-std::tuple<double, int> ECdistance(const Eigen::MatrixXd &state,
-                                   const vector<Eigen::Matrix4d> &curve) {
+std::tuple<double, int> ECdistance(const Eigen::MatrixXd& state,
+                                   const vector<Eigen::Matrix4d>& curve) {
   Eigen::Matrix4d V = state;
   int ind_min = 0;
   double min_distance = 1e6;
@@ -2583,9 +2746,9 @@ Eigen::Matrix4d expSE3(const Eigen::Matrix4d X) {
 // TODO: Implement explicit analytic computation of the L operator (normal
 // component)
 VectorFieldResult vectorfield_SE3(
-    const Eigen::Matrix4d &state, const vector<Eigen::Matrix4d> &curve,
+    const Eigen::Matrix4d& state, const vector<Eigen::Matrix4d>& curve,
     float kt1, float kt2, float kt3, float kn1, float kn2,
-    const vector<Eigen::MatrixXd> &curve_derivative, double delta, double ds) {
+    const vector<Eigen::MatrixXd>& curve_derivative, double delta, double ds) {
   // auto [min_distance, closest_index] = ECdistance(state, curve);
   std::tuple<double, int> res_ = ECdistance(state, curve);
   double min_distance;

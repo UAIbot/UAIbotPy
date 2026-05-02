@@ -1322,7 +1322,11 @@ class Utils:
             return Utils.cvt(dist_res.proj_A), Utils.cvt(dist_res.proj_B), dist_res.dist, dist_res.hist_error
 
 
+def smooth_min(x: List[float], r: float) -> float:
+    return ub_cpp.smooth_min(x, r)
 
+def smooth_max(x: List[float], r: float) -> float:
+    return ub_cpp.smooth_max(x, r)
 
 
 
