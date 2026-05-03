@@ -269,7 +269,9 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
       .def("__str__", &Manipulator::toString)
       .def("__repr__", &Manipulator::toString)
       .def("signed_distance", &Manipulator::signedDistance, py::arg("obj"),
-           py::arg("q"), py::arg("htm"), py::arg("max_dist"), py::arg("r"));
+           py::arg("q"), py::arg("htm"), py::arg("max_dist"), py::arg("gamma"), py::arg("is_conservative") = false)
+      .def("signed_distance_auto", &Manipulator::signedDistanceAuto, py::arg("q"),
+           py::arg("max_dist"), py::arg("gamma"), py::arg("is_conservative") = false);
 
   m.def("vectorfield_rn", &vectorfield_rn, py::arg("q"), py::arg("q_path"),
         py::arg("alpha"), py::arg("const_velocity"), py::arg("is_closed"),
@@ -282,7 +284,17 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
         py::arg("curve_derivative") = std::vector<Eigen::MatrixXd>(),
         py::arg("delta") = c_delta, py::arg("ds") = c_ds);
   m.def("distance_box2box", &distBox2Box, py::arg("box1"), py::arg("box2"),
-        py::arg("r"));
+        py::arg("gamma"), py::arg("is_conservative") = true);
+  m.def("distance_set2set", &distSet2Set, py::arg("vertices_A"), py::arg("vertices_B"),
+        py::arg("normals_A"), py::arg("normals_B"), py::arg("edge_normals"),
+        py::arg("gamma"));
+  // Overloaded functions:
+  m.def("get_candidate_normals",
+        [](const GeometricPrimitives &polyhedron1, const GeometricPrimitives &polyhedron2,
+           bool is_conservative) {
+          return getCandidateNormals(polyhedron1, polyhedron2, is_conservative);
+        },
+        py::arg("polyhedron1"), py::arg("polyhedron2"), py::arg("is_conservative") = false);
   m.def(
       "smooth_min",
       [](const std::vector<float> &values, float r) {

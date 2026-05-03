@@ -35,7 +35,7 @@ from ._attach_object import _attach_object
 from ._detach_object import _detach_object
 
 from ._compute_dist import _compute_dist, _diststructrobotobj_cpp2py
-from ._compute_dist_auto import _compute_dist_auto
+from ._compute_dist_auto import _compute_dist_auto, _diststructrobotauto_cpp2py
 from ._check_free_config import _check_free_config
 
 from ._create_kuka_kr5 import _create_kuka_kr5
@@ -1452,15 +1452,22 @@ class Robot:
         return _compute_dist_auto(self, q, old_dist_struct, tol, no_iter_max, max_dist, h, eps, mode)
 
     def signed_distance(self, obj: MetricObject, q: Optional[Vector] = None, htm: Optional[HTMatrix]=None, 
-                     max_dist: float = np.inf, r: float = 1e-2,
+                        max_dist: float = np.inf, gamma: float = 1e-2, is_conservative: bool = True,
                      mode: str = 'auto') -> "DistStructRobotObj":
 
         if q is None:
             q = self.q
         if htm is None:
             htm = self.htm
-        dsro = self.cpp_robot.signed_distance(obj.cpp_obj, q, htm, max_dist, r)
+        dsro = self.cpp_robot.signed_distance(obj.cpp_obj, q, htm, max_dist, gamma, is_conservative)
         return _diststructrobotobj_cpp2py(dsro, obj, self)
+
+    def signed_distance_auto(self, q: Optional[Vector] = None, max_dist: float = np.inf, gamma: float = 1e-2,
+                             is_conservative: bool = True, mode: str = 'auto') -> "DistStructRobotAuto":
+        if q is None:
+            q = self.q
+        dsra = self.cpp_robot.signed_distance_auto(q, max_dist, gamma, is_conservative)
+        return _diststructrobotauto_cpp2py(dsra, self)
 
     def check_free_config(self, q: Optional[Vector]=None, htm: Optional[HTMatrix]=None, 
                           obstacles: List[MetricObject]=[], check_joint: bool = True, check_auto: bool = True,

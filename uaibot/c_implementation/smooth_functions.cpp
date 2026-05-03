@@ -344,7 +344,8 @@ std::vector<Eigen::Vector3f> getFaceNormalVectors(
     return normals;
   } else if (polyhedron.type == 4) {
     // Polytope case
-    int rowsA = polyhedron.A.rows() std::vector<Eigen::Vector3f> normals(rowsA);
+    int rowsA = polyhedron.A.rows();
+    std::vector<Eigen::Vector3f> normals(rowsA);
     // Each normal is given by the rows of A, so we add both the row and -row
     // normalized
     for (int i = 0; i < rowsA; i = i + 2) {
@@ -406,9 +407,10 @@ std::vector<Eigen::Vector3f> getEdgeNormalVectors(
 }
 
 tuple<std::vector<Eigen::Vector3f>, std::vector<Eigen::Vector3f>,
-           std::vector<Eigen::Vector3f>>
+      std::vector<Eigen::Vector3f>>
 getCandidateNormals(const GeometricPrimitives& polyhedron1,
-                 const GeometricPrimitives& polyhedron2, bool isConservative) {
+                    const GeometricPrimitives& polyhedron2,
+                    bool isConservative) {
   std::vector<Eigen::Vector3f> faceNormals1 = getFaceNormalVectors(polyhedron1);
   std::vector<Eigen::Vector3f> faceNormals2 = getFaceNormalVectors(polyhedron2);
   if (isConservative) {
@@ -424,9 +426,11 @@ getCandidateNormals(const GeometricPrimitives& polyhedron1,
 }
 
 tuple<std::vector<Eigen::Vector3f>, std::vector<Eigen::Vector3f>,
-           std::vector<Eigen::Vector3f>>
-getCandidateNormals(std::vector<Eigen::Vector3f> faceNormals1, std::vector<Eigen::Vector3f> faceNormals2,
-                 std::vector<Eigen::Vector3f> edges1, std::vector<Eigen::Vector3f> edges2, bool isConservative) {
+      std::vector<Eigen::Vector3f>>
+getCandidateNormals(std::vector<Eigen::Vector3f> faceNormals1,
+                    std::vector<Eigen::Vector3f> faceNormals2,
+                    std::vector<Eigen::Vector3f> edges1,
+                    std::vector<Eigen::Vector3f> edges2, bool isConservative) {
   if (isConservative) {
     return make_tuple(faceNormals1, faceNormals2,
                       std::vector<Eigen::Vector3f>());
@@ -436,24 +440,25 @@ getCandidateNormals(std::vector<Eigen::Vector3f> faceNormals1, std::vector<Eigen
     return make_tuple(faceNormals1, faceNormals2, edgeNormalVectors);
   }
 }
- 
+
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distBox2Box(const GeometricPrimitives& polyhedron1,
-            const GeometricPrimitives& polyhedron2, float gamma) {
+            const GeometricPrimitives& polyhedron2, float gamma,
+            bool isConservative) {
   // Throw error if the inputs are not boxes (not Implemented yet)
   if (polyhedron1.type != 1 || polyhedron2.type != 1) {
     throw std::invalid_argument("Both inputs must be box primitives");
   }
-  std::vector<Eigen::Vector3f> A =
-      getBoxVertices(box1);  // box1 vertices (size numA)
-  std::vector<Eigen::Vector3f> B =
-      getBoxVertices(box2);  // box2 vertices (size numB)
-  std::vector<Eigen::Vector3f> normalsA =
-      getNormalsVectors(box1);  // box1 face normals (size numNA)
-  std::vector<Eigen::Vector3f> normalsB =
-      getNormalsVectors(box2);  // box2 face normals (size numNB)
-
-  return distSet2Set(A, B, normalsA, normalsB, gamma);
+  std::vector<Eigen::Vector3f> A = getBoxVertices(polyhedron1);
+  std::vector<Eigen::Vector3f> B = getBoxVertices(polyhedron2);
+  tuple<std::vector<Eigen::Vector3f>, std::vector<Eigen::Vector3f>,
+        std::vector<Eigen::Vector3f>>
+      normalsTuple =
+          getCandidateNormals(polyhedron1, polyhedron2, isConservative);
+  std::vector<Eigen::Vector3f> normalsA = get<0>(normalsTuple);
+  std::vector<Eigen::Vector3f> normalsB = get<1>(normalsTuple);
+  std::vector<Eigen::Vector3f> edgeNormals = get<2>(normalsTuple);
+  return distSet2Set(A, B, normalsA, normalsB, edgeNormals, gamma);
 }
 
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
@@ -462,8 +467,9 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
             std::vector<Eigen::Vector3f> normalsA,
             std::vector<Eigen::Vector3f> normalsB,
             std::vector<Eigen::Vector3f> edgeNormals, float gamma) {
-  // Returns a tuple with (distance, gradient w.r.t minkowski vertices, gradient w.r.t A vertices, gradient w.r.t B vertices, gradient w.r.t normals)
-  // the normals are ordered as [faceNormalsA, edgeNormals, faceNormalsB]
+  // Returns a tuple with (distance, gradient w.r.t minkowski vertices, gradient
+  // w.r.t A vertices, gradient w.r.t B vertices, gradient w.r.t normals) the
+  // normals are ordered as [faceNormalsA, edgeNormals, faceNormalsB]
   int numA = verticesA.size();
   int numB = verticesB.size();
 
@@ -473,7 +479,8 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
   // Create normalsSet by concatenating normals of both polyhedra
   std::vector<Eigen::Vector3f> normalsSet;
   normalsSet.insert(normalsSet.end(), normalsA.begin(), normalsA.end());
-  // if conservative case, then edgeNormals is empty, so this will not add anything
+  // if conservative case, then edgeNormals is empty, so this will not add
+  // anything
   normalsSet.insert(normalsSet.end(), edgeNormals.begin(), edgeNormals.end());
   normalsSet.insert(normalsSet.end(), normalsB.begin(), normalsB.end());
 
@@ -546,7 +553,7 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
     for (int bIdx = 0; bIdx < numB; ++bIdx) {
       float sumV = 0.0f;
       for (int aIdx = 0; aIdx < numA; ++aIdx) {
-        sumV += jacobian(i, aIdx * numB + bIdx);
+        sumV += dGn_dVc(i, aIdx * numB + bIdx);
       }
       gradVertsB.row(bIdx) -= w_i * sumV * d_i.transpose();  // minus sign!
     }
@@ -554,7 +561,7 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
     for (int vIdx = 0; vIdx < numV; ++vIdx) {
       // w_i * sum_{p in P}sum_{r in R} dgn/dhnpr * (p - r) contribution
       gradNormals.row(i) +=
-          w_i * jacobian(i, vIdx) * minkowskiVertices[vIdx].transpose();
+          w_i * dGn_dVc(i, vIdx) * minkowskiVertices[vIdx].transpose();
     }
   }
   // TODO: Remove this later
@@ -693,5 +700,5 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
   // std::cout << "[DEBUG] Difference (tangential):\n"
   //           << (ana_grad_tangent - num_grad_normals) << std::endl;
   // -------------------------------------------------------------
-  return make_tuple(finalDist, finalGrad, grad_box1, grad_box2, grad_normals);
+  return make_tuple(finalDist, gradVertsMinkowski, gradVertsA, gradVertsB, gradNormals);
 }

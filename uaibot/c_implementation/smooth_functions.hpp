@@ -1,6 +1,7 @@
 #pragma once
-#include "declarations.h"
 #include <Eigen/Dense>
+
+#include "declarations.h"
 
 using namespace std;
 
@@ -16,41 +17,68 @@ float smoothMin2Elements(float x, float y, float r);
 Eigen::VectorXf smoothMin2ElementsGradient(float x, float y, float r);
 tuple<float, Eigen::VectorXf> smoothMin2ElementsWithGradient(float x, float y,
                                                              float r);
-float smoothMinList(const Eigen::VectorXf &values, float r);
-Eigen::VectorXf smoothMinListGradient(const Eigen::VectorXf &values, float r);
-tuple<float, Eigen::VectorXf>
-smoothMinListWithGradient(const Eigen::VectorXf &values, float r);
+float smoothMinList(const Eigen::VectorXf& values, float r);
+Eigen::VectorXf smoothMinListGradient(const Eigen::VectorXf& values, float r);
+tuple<float, Eigen::VectorXf> smoothMinListWithGradient(
+    const Eigen::VectorXf& values, float r);
 // Overloads
-float smoothMinList(const std::vector<float> &values, float r);
-Eigen::VectorXf smoothMinListGradient(const std::vector<float> &values,
+float smoothMinList(const std::vector<float>& values, float r);
+Eigen::VectorXf smoothMinListGradient(const std::vector<float>& values,
                                       float r);
-tuple<float, Eigen::VectorXf>
-smoothMinListWithGradient(const std::vector<float> &values, float r);
+tuple<float, Eigen::VectorXf> smoothMinListWithGradient(
+    const std::vector<float>& values, float r);
 // Max
 float smoothMax2Elements(float x, float y, float r);
 Eigen::VectorXf smoothMax2ElementsGradient(float x, float y, float r);
 tuple<float, Eigen::VectorXf> smoothMax2ElementsWithGradient(float x, float y,
                                                              float r);
-float smoothMaxList(const Eigen::VectorXf &values, float r);
-Eigen::VectorXf smoothMaxListGradient(const Eigen::VectorXf &values, float r);
-tuple<float, Eigen::VectorXf>
-smoothMaxListWithGradient(const Eigen::VectorXf &values, float r);
+float smoothMaxList(const Eigen::VectorXf& values, float r);
+Eigen::VectorXf smoothMaxListGradient(const Eigen::VectorXf& values, float r);
+tuple<float, Eigen::VectorXf> smoothMaxListWithGradient(
+    const Eigen::VectorXf& values, float r);
 // Overloads
-float smoothMaxList(const std::vector<float> &values, float r);
-Eigen::VectorXf smoothMaxListGradient(const std::vector<float> &values,
+float smoothMaxList(const std::vector<float>& values, float r);
+Eigen::VectorXf smoothMaxListGradient(const std::vector<float>& values,
                                       float r);
-tuple<float, Eigen::VectorXf>
-smoothMaxListWithGradient(const std::vector<float> &values, float r);
+tuple<float, Eigen::VectorXf> smoothMaxListWithGradient(
+    const std::vector<float>& values, float r);
 
 // ----------------------------------------------------------------------------------------
 // // Distance related smooth functions
 // ----------------------------------------------------------------------------------------
 
-std::vector<Eigen::Vector3f> getBoxVertices(const GeometricPrimitives &box);
-std::vector<Eigen::Vector3f>
-getMinkowskiDifferenceVertices(const GeometricPrimitives &box1,
-                               const GeometricPrimitives &box2);
-std::vector<Eigen::Vector3f> getNormalsVectors(const GeometricPrimitives &box);
+std::vector<Eigen::Vector3f> getBoxVertices(const GeometricPrimitives& box);
+std::vector<Eigen::Vector3f> getMinkowskiDifferenceVertices(
+    const GeometricPrimitives& box1, const GeometricPrimitives& box2);
+std::vector<Eigen::Vector3f> getMinkowskiDifference(
+    const std::vector<Eigen::Vector3f>& pointsA,
+    const std::vector<Eigen::Vector3f>& pointsB);
+std::vector<Eigen::Vector3f> getFaceNormalVectors(
+    const GeometricPrimitives& polyhedron);
+std::vector<Eigen::Vector3f> getEdgeVectors(
+    const GeometricPrimitives& polyhedron);
+std::vector<Eigen::Vector3f> getEdgeNormalVectors(
+    const std::vector<Eigen::Vector3f>& edges1,
+    const std::vector<Eigen::Vector3f>& edges2);
+tuple<std::vector<Eigen::Vector3f>, std::vector<Eigen::Vector3f>,
+      std::vector<Eigen::Vector3f>>
+getCandidateNormals(const GeometricPrimitives& polyhedron1,
+                    const GeometricPrimitives& polyhedron2,
+                    bool isConservative);
+tuple<std::vector<Eigen::Vector3f>, std::vector<Eigen::Vector3f>,
+      std::vector<Eigen::Vector3f>>
+getCandidateNormals(std::vector<Eigen::Vector3f> faceNormals1,
+                    std::vector<Eigen::Vector3f> faceNormals2,
+                    std::vector<Eigen::Vector3f> edges1,
+                    std::vector<Eigen::Vector3f> edges2, bool isConservative);
+
+std::vector<Eigen::Vector3f> getNormalsVectors(const GeometricPrimitives& box);
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
-distBox2Box(const GeometricPrimitives &box1, const GeometricPrimitives &box2,
-            float r);
+distBox2Box(const GeometricPrimitives& polyhedron1,
+            const GeometricPrimitives& polyhedron2, float gamma, bool isConservative = true);
+tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
+distSet2Set(std::vector<Eigen::Vector3f> verticesA,
+            std::vector<Eigen::Vector3f> verticesB,
+            std::vector<Eigen::Vector3f> normalsA,
+            std::vector<Eigen::Vector3f> normalsB,
+            std::vector<Eigen::Vector3f> edgeNormals, float gamma);

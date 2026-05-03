@@ -2131,7 +2131,7 @@ DistStructRobotObj Manipulator::compute_dist(GeometricPrimitives obj,
 
 DistStructRobotObj Manipulator::signedDistance(GeometricPrimitives obj,
                                                VectorXf q, Matrix4f htm,
-                                               float max_dist, float r,
+                                               float max_dist, float gamma,
                                                bool isConservative) const {
   FKResult fkres = fk(q, htm, true);
 
@@ -2188,7 +2188,7 @@ DistStructRobotObj Manipulator::signedDistance(GeometricPrimitives obj,
 
         tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf,
               Eigen::MatrixXf>
-            res = distSet2Set(P, B, normalsColObj, normalsObj, r);
+            res = distSet2Set(P, B, normalsColObj, normalsObj, normalsEdges, gamma);
         // PrimDistResult pdr = obj.dist_to(obj_copy, h, eps, tol,
         // no_iter_max, p_obj_0);
         float dist = get<0>(res);
@@ -2437,7 +2437,7 @@ DistStructRobotAuto Manipulator::compute_dist_auto(
 }
 
 DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
-                                                    float r,
+                                                    float gamma,
                                                     bool isConservative) const {
   FKResult fkres = fk(q, this->htm_world_to_dh0, true);
 
@@ -2519,7 +2519,7 @@ DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
 
             tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf,
                   Eigen::MatrixXf>
-                res = distSet2Set(P1, P2, normalsColObj1, normalsColObj2, r);
+                res = distSet2Set(P1, P2, normalsColObj1, normalsColObj2, normalsEdges, gamma);
             float dist = get<0>(res);
             VectorXf grad = get<1>(res);
             // Each row is a 1 x 3 gradient for every vertex of each object
@@ -2547,7 +2547,7 @@ DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
             // Compute the gradient of the distance dDdq:
             // dDdq = sum_{p \in P1} dD/dp * dp/dq + sum_{p \in P2} dD/dp *
             // dp/dq + sum_{n \in N} dD/dn * dn/dq Loop over vertices of P1
-            Eigen::RowVectorXf dDdq_wrtP1 = Eigen::RowVectorf::Zero(q.rows());
+            Eigen::RowVectorXf dDdq_wrtP1 = Eigen::RowVectorXf::Zero(q.rows());
             for (int i = 0; i < P1.size(); i++) {
               Vector3f pi = P1[i];
               MatrixXf JvAtColVertex = Jv_aux1 - s_mat(pi) * Jw1;  // dp/dq
@@ -2557,7 +2557,7 @@ DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
                                   // gradient of the distance with respect to q
             }
             // Loop over vertices of P2
-            Eigen::RowVectorXf dDdq_wrtP2 = Eigen::RowVectorf::Zero(q.rows());
+            Eigen::RowVectorXf dDdq_wrtP2 = Eigen::RowVectorXf::Zero(q.rows());
             for (int i = 0; i < P2.size(); i++) {
               Vector3f pi = P2[i];
               MatrixXf JvAtColVertex = Jv_aux2 - s_mat(pi) * Jw2;  // dp/dq
@@ -2608,7 +2608,7 @@ DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
 
             old_rows = dist_tot.rows();
             dist_tot.conservativeResize(old_rows + 1, Eigen::NoChange);
-            dist_tot[old_rows] = pdr.dist;
+            dist_tot[old_rows] = dist;
 
             dsra.list_info.push_back(dsll_new);
           }
