@@ -14,6 +14,7 @@
 #include "gjk.h"
 #include "nanoflann.hpp"
 #include "smooth_functions.hpp"
+#include "vertex_enumeration.hpp"
 
 using namespace std;
 using namespace Eigen;
@@ -300,13 +301,18 @@ GeometricPrimitives GeometricPrimitives::create_convexpolytope(Matrix4f htm,
 
   MatrixXf A_norm = MatrixXf(num_constraints, dim);
   VectorXf b_norm = VectorXf(num_constraints);
+  MatrixXf A_local_norm = A;
+  VectorXf b_local_norm = b;
 
   for (int i = 0; i < num_constraints; ++i) {
     float row_norm = A_mod.row(i).norm();
+    float local_row_norm = A.row(i).norm();
 
     if (row_norm > 1e-6) {
       A_norm.row(i) = A_mod.row(i) / row_norm;
+      A_local_norm.row(i) = A.row(i) / local_row_norm;
       b_norm(i) = b_mod(i) / row_norm;
+      b_local_norm(i) = b(i) / local_row_norm;
     } else {
       A_norm.row(i) = A_mod.row(i);
       b_norm(i) = b_mod(i);
@@ -317,6 +323,35 @@ GeometricPrimitives GeometricPrimitives::create_convexpolytope(Matrix4f htm,
   gp.htm = htm;
   gp.A = A_norm;
   gp.b = b_norm;
+  gp.A_local = A_local_norm;
+  gp.b_local = b_local_norm;
+
+  // 1. Build the N×4 half‑space matrix (each row: h0, h1, h2, h3)
+  //    Inequality: n·x ≤ b  →  n·x – b ≤ 0  →  [nx, ny, nz, -b]
+  int num_faces = gp.A_local.rows();
+  Eigen::MatrixX4d hPoly(num_faces, 4);
+  for (int i = 0; i < num_faces; ++i) {
+      Eigen::Vector3d n = gp.A_local.row(i).cast<double>();   // outward normal
+      double d = -static_cast<double>(gp.b_local(i));         // h3 = -b
+      hPoly.row(i) << n.x(), n.y(), n.z(), d;
+  }
+
+  // 2. Enumerate vertices with the known interior point (origin)
+  Eigen::Matrix3Xd vPoly;   // will be 3 × M (columns are vertices)
+  Eigen::Vector3d inner(0.0, 0.0, 0.0); // always inside in local frame
+  vertex_enumeration::enumerateVs(hPoly, inner, vPoly);
+
+  int num_vertices = vPoly.cols();
+
+  // 3. Store local vertices (converted back to float if needed)
+  std::vector<Eigen::Vector3f> local_vertices;
+  local_vertices.reserve(num_vertices);
+  for (int j = 0; j < num_vertices; ++j) {
+      Eigen::Vector3d v = vPoly.col(j);
+      local_vertices.emplace_back(v.cast<float>());
+  }
+
+  gp.vertices_local = local_vertices;
 
   float x_min = VERYBIGNUMBER;
   float x_max = -VERYBIGNUMBER;
@@ -2188,7 +2223,8 @@ DistStructRobotObj Manipulator::signedDistance(GeometricPrimitives obj,
 
         tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf,
               Eigen::MatrixXf>
-            res = distSet2Set(P, B, normalsColObj, normalsObj, normalsEdges, gamma);
+            res = distSet2Set(P, B, normalsColObj, normalsObj, normalsEdges,
+                              gamma);
         // PrimDistResult pdr = obj.dist_to(obj_copy, h, eps, tol,
         // no_iter_max, p_obj_0);
         float dist = get<0>(res);
@@ -2255,52 +2291,56 @@ DistStructRobotObj Manipulator::signedDistance(GeometricPrimitives obj,
 
   dsro.jac_dist_mat = jac_tot;
   dsro.dist_vect = dist_tot;
-  // // ========== DEBUG: Numerical Jacobian Check ==========
-  // const float eps = 1e-4f;
-  // const int n_q = q.rows();
-  // const int n_rows = jac_tot.rows();
-  //
-  // // Lambda that computes only distances (no gradients) for all collision
-  // primitives,
-  // // preserving the exact same order as jac_tot rows.
-  // auto computeDistancesOnly = [&](const Eigen::VectorXf& q_query) ->
-  // Eigen::VectorXf {
-  //     FKResult fk_query = fk(q_query, htm, false);  // false = skip Jacobian
-  //     computation for speed Eigen::VectorXf dists(n_rows); int row_idx = 0;
-  //     for (int ind_links = 0; ind_links < no_links; ++ind_links) {
-  //         Matrix4f htm_link = fk_query.htm_dh[ind_links];
-  //         for (int ind_obj_link = 0; ind_obj_link <
-  //         geo_prim[ind_links].size(); ++ind_obj_link) {
-  //             GeometricPrimitives col_obj =
-  //             geo_prim[ind_links][ind_obj_link].copy(); col_obj.htm =
-  //             htm_link * geo_prim[ind_links][ind_obj_link].htm; if
-  //             (AABB::dist_aabb(col_obj.get_aabb(), obj_aabb) < max_dist) {
-  //                 dists[row_idx] = std::get<0>(distSet2Set(col_obj, obj, r));
-  //             } else {
-  //                 dists[row_idx] = max_dist;  // treat far objects as clamped
-  //                 distance
-  //             }
-  //             ++row_idx;
-  //         }
-  //     }
-  //     return dists;
-  // };
-  //
-  // Eigen::VectorXf d0 = computeDistancesOnly(q);
-  // Eigen::MatrixXf num_jac(n_rows, n_q);
-  // for (int j = 0; j < n_q; ++j) {
-  //     Eigen::VectorXf q_plus = q;   q_plus(j) += eps;
-  //     Eigen::VectorXf q_minus = q;  q_minus(j) -= eps;
-  //     Eigen::VectorXf d_plus  = computeDistancesOnly(q_plus);
-  //     Eigen::VectorXf d_minus = computeDistancesOnly(q_minus);
-  //     num_jac.col(j) = (d_plus - d_minus) / (2.0f * eps);
-  // }
-  //
-  // std::cout << "[DEBUG] Analytical Jacobian (jac_tot):\n" << jac_tot <<
-  // std::endl; std::cout << "[DEBUG] Numerical Jacobian:\n" << num_jac <<
-  // std::endl; std::cout << "[DEBUG] Difference (Analytical - Numerical):\n" <<
-  // (jac_tot - num_jac) << std::endl;
-  // // ======================================================
+  // ========== DEBUG: Numerical Jacobian Check ==========
+  const float eps = 1e-4f;
+  const int n_q = q.rows();
+  const int n_rows = jac_tot.rows();
+
+  // Lambda that computes only distances (no gradients) for all collision
+  // primitives, preserving the exact same order as jac_tot rows.
+  auto computeDistancesOnly =
+      [&](const Eigen::VectorXf& q_query) -> Eigen::VectorXf {
+    FKResult fk_query =
+        fk(q_query, htm, false);  // false = skip Jacobian computation for speed
+                                  // Eigen::VectorXf dists(n_rows);
+    Eigen::VectorXf dists(n_rows);
+    int row_idx = 0;
+    for (int ind_links = 0; ind_links < no_links; ++ind_links) {
+      Matrix4f htm_link = fk_query.htm_dh[ind_links];
+      for (int ind_obj_link = 0; ind_obj_link < geo_prim[ind_links].size();
+           ++ind_obj_link) {
+        GeometricPrimitives col_obj = geo_prim[ind_links][ind_obj_link].copy();
+        col_obj.htm = htm_link * geo_prim[ind_links][ind_obj_link].htm;
+        if (AABB::dist_aabb(col_obj.get_aabb(), obj_aabb) < max_dist) {
+          dists[row_idx] =
+              std::get<0>(distBox2Box(col_obj, obj, gamma, isConservative));
+        } else {
+          dists[row_idx] = max_dist;  // treat far objects as clamped distance
+        }
+        ++row_idx;
+      }
+    }
+    return dists;
+  };
+
+  Eigen::VectorXf d0 = computeDistancesOnly(q);
+  Eigen::MatrixXf num_jac(n_rows, n_q);
+  for (int j = 0; j < n_q; ++j) {
+    Eigen::VectorXf q_plus = q;
+    q_plus(j) += eps;
+    Eigen::VectorXf q_minus = q;
+    q_minus(j) -= eps;
+    Eigen::VectorXf d_plus = computeDistancesOnly(q_plus);
+    Eigen::VectorXf d_minus = computeDistancesOnly(q_minus);
+    num_jac.col(j) = (d_plus - d_minus) / (2.0f * eps);
+  }
+
+  std::cout << "[DEBUG] Analytical Jacobian (jac_tot):\n"
+            << jac_tot << std::endl;
+  std::cout << "[DEBUG] Numerical Jacobian:\n" << num_jac << std::endl;
+  std::cout << "[DEBUG] Difference (Analytical - Numerical):\n"
+            << (jac_tot - num_jac) << std::endl;
+  // ======================================================
 
   return dsro;
 }
@@ -2497,10 +2537,6 @@ DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
             std::vector<Eigen::Vector3f> normalsColObj1 = get<0>(normalsTuple);
             std::vector<Eigen::Vector3f> normalsColObj2 = get<1>(normalsTuple);
             std::vector<Eigen::Vector3f> normalsEdges = get<2>(normalsTuple);
-            // std::vector<Eigen::Vector3f> normalsColObj1 =
-            //     getNormalsVectors(obj_copy_1);
-            // std::vector<Eigen::Vector3f> normalsColObj2 =
-            //     getNormalsVectors(obj_copy_2);
             int numNormalsColObj1 =
                 normalsColObj1.size();  // depends only on collision object 1
             int numNormalsEdges =
@@ -2519,7 +2555,8 @@ DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
 
             tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf,
                   Eigen::MatrixXf>
-                res = distSet2Set(P1, P2, normalsColObj1, normalsColObj2, normalsEdges, gamma);
+                res = distSet2Set(P1, P2, normalsColObj1, normalsColObj2,
+                                  normalsEdges, gamma);
             float dist = get<0>(res);
             VectorXf grad = get<1>(res);
             // Each row is a 1 x 3 gradient for every vertex of each object
@@ -2619,6 +2656,88 @@ DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
   dsra.jac_dist_mat = jac_tot;
   dsra.dist_vect = dist_tot;
 
+  // ========== DEBUG: Numerical Jacobian Check ==========
+  const float eps = 1e-4f;
+  const int n_q = q.rows();
+  const int n_rows = jac_tot.rows();
+
+  // Lambda that recomputes distances (no gradients) for the exact same
+  // collision pairs
+  auto computeDistancesOnly =
+      [&](const Eigen::VectorXf& q_query) -> Eigen::VectorXf {
+    FKResult fk_query =
+        fk(q_query, this->htm_world_to_dh0, false);  // skip Jacobian
+
+    // Precompute Jv_aux for each link (needed? No, not needed for distance
+    // only) Actually we don't need Jacobians for distance, so we can skip
+    // Jv_aux completely.
+
+    Eigen::VectorXf dists(n_rows);
+    int row_idx = 0;
+
+    for (int ind_links_1 = 0; ind_links_1 < no_links; ind_links_1++) {
+      for (int ind_links_2 = ind_links_1 + 2; ind_links_2 < no_links;
+           ind_links_2++) {
+        for (int ind_obj_link_1 = 0;
+             ind_obj_link_1 < geo_prim[ind_links_1].size(); ++ind_obj_link_1) {
+          for (int ind_obj_link_2 = 0;
+               ind_obj_link_2 < geo_prim[ind_links_2].size();
+               ++ind_obj_link_2) {
+            GeometricPrimitives obj1 =
+                geo_prim[ind_links_1][ind_obj_link_1].copy();
+            obj1.htm = fk_query.htm_dh[ind_links_1] *
+                       geo_prim[ind_links_1][ind_obj_link_1].htm;
+
+            GeometricPrimitives obj2 =
+                geo_prim[ind_links_2][ind_obj_link_2].copy();
+            obj2.htm = fk_query.htm_dh[ind_links_2] *
+                       geo_prim[ind_links_2][ind_obj_link_2].htm;
+
+            if (AABB::dist_aabb(obj1.get_aabb(), obj2.get_aabb()) < max_dist) {
+              std::vector<Eigen::Vector3f> P1 = getBoxVertices(obj1);
+              std::vector<Eigen::Vector3f> P2 = getBoxVertices(obj2);
+              auto normalsTuple =
+                  getCandidateNormals(obj1, obj2, isConservative);
+              std::vector<Eigen::Vector3f> normalsColObj1 =
+                  get<0>(normalsTuple);
+              std::vector<Eigen::Vector3f> normalsColObj2 =
+                  get<1>(normalsTuple);
+              std::vector<Eigen::Vector3f> normalsEdges = get<2>(normalsTuple);
+
+              // Only need the distance, ignore gradients
+              auto res = distSet2Set(P1, P2, normalsColObj1, normalsColObj2,
+                                     normalsEdges, gamma);
+              dists(row_idx) = std::get<0>(res);
+            } else {
+              dists(row_idx) =
+                  max_dist;  // far objects clamped (or any large value)
+            }
+            ++row_idx;
+          }
+        }
+      }
+    }
+    return dists;
+  };
+
+  Eigen::VectorXf d0 = computeDistancesOnly(q);
+  Eigen::MatrixXf num_jac(n_rows, n_q);
+  for (int j = 0; j < n_q; ++j) {
+    Eigen::VectorXf q_plus = q;
+    q_plus(j) += eps;
+    Eigen::VectorXf q_minus = q;
+    q_minus(j) -= eps;
+    Eigen::VectorXf d_plus = computeDistancesOnly(q_plus);
+    Eigen::VectorXf d_minus = computeDistancesOnly(q_minus);
+    num_jac.col(j) = (d_plus - d_minus) / (2.0f * eps);
+  }
+
+  std::cout << "[DEBUG] Analytical Jacobian (jac_tot):\n"
+            << jac_tot << std::endl;
+  std::cout << "[DEBUG] Numerical Jacobian:\n" << num_jac << std::endl;
+  std::cout << "[DEBUG] Difference (Analytical - Numerical):\n"
+            << (jac_tot - num_jac) << std::endl;
+  // ======================================================
   return dsra;
 }
 // -----------------------------------------------------------------------------

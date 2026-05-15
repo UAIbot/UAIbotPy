@@ -221,6 +221,7 @@ using KDTree = std::shared_ptr<nanoflann::KDTreeSingleIndexAdaptor<
     nanoflann::PointCloud<float>, 3>>;
 
 struct GeometricPrimitives {
+ public:
   float lx;
   float ly;
   float lz;
@@ -235,6 +236,10 @@ struct GeometricPrimitives {
   // For convex polytopes
   MatrixXf A;
   VectorXf b;
+  // Constraints in local frame (without HTM multiplication)
+  MatrixXf A_local;
+  VectorXf b_local;
+  std::vector<Eigen::Vector3f> vertices_local;
 
   // For point cloud and convex polytopes
   vector<Vector3f> points_gp;

@@ -284,10 +284,10 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
         py::arg("curve_derivative") = std::vector<Eigen::MatrixXd>(),
         py::arg("delta") = c_delta, py::arg("ds") = c_ds);
   m.def("distance_box2box", &distBox2Box, py::arg("box1"), py::arg("box2"),
-        py::arg("gamma"), py::arg("is_conservative") = true);
-  m.def("distance_set2set", &distSet2Set, py::arg("vertices_A"), py::arg("vertices_B"),
-        py::arg("normals_A"), py::arg("normals_B"), py::arg("edge_normals"),
-        py::arg("gamma"));
+        py::arg("gamma"), py::arg("is_conservative") = true, py::arg("skip_gradient") = false);
+  // m.def("distance_set2set", &distSet2Set, py::arg("vertices_A"), py::arg("vertices_B"),
+  //       py::arg("normals_A"), py::arg("normals_B"), py::arg("edge_normals"),
+  //       py::arg("gamma"), py::arg("skip_gradient") = false);
   // Overloaded functions:
   m.def("get_candidate_normals",
         [](const GeometricPrimitives &polyhedron1, const GeometricPrimitives &polyhedron2,
@@ -307,4 +307,13 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
         return smoothMaxListWithGradient(values, r);
       },
       py::arg("values"), py::arg("r"));
+  m.def(
+      "distance_set2set",
+      [](const GeometricPrimitives &polyhedron1, const GeometricPrimitives &polyhedron2,
+         float gamma, bool is_conservative, bool skip_gradient) {
+        return distSet2Set(polyhedron1, polyhedron2, gamma, is_conservative, skip_gradient);
+      },
+      py::arg("polyhedron1"), py::arg("polyhedron2"), py::arg("gamma"),
+      py::arg("is_conservative") = true, py::arg("skip_gradient") = false
+      );
 }

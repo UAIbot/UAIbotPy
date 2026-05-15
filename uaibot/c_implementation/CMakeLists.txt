@@ -34,7 +34,11 @@ message(STATUS "[DEBUG] Python lib directory: ${Python3_LIBRARY_DIR}")
 #Add eigen
 set(THIRD_PARTY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 set(EIGEN3_INCLUDE_DIR ${THIRD_PARTY_DIR})
-include_directories(${EIGEN3_INCLUDE_DIR})
+# include_directories(${EIGEN3_INCLUDE_DIR})
+add_library(Eigen3::Eigen INTERFACE IMPORTED)
+set_target_properties(Eigen3::Eigen PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${EIGEN3_INCLUDE_DIR}"
+)
 
 
 # Set C++ standard and optimization flags
@@ -62,6 +66,10 @@ set(SOURCES
 # Define an INTERFACE library for nanoflann (header-only)
 add_library(nanoflann INTERFACE)
 target_include_directories(nanoflann INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+# Add Vertex Enumeration as an INTERFACE library (header-only)
+add_library(vertex_enumeration INTERFACE)
+target_include_directories(vertex_enumeration INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(vertex_enumeration INTERFACE Eigen3::Eigen)
 
 # Ensure pybind11 and Eigen are properly included
 pybind11_add_module(uaibot_cpp_bind ${SOURCES})
@@ -69,10 +77,13 @@ pybind11_add_module(uaibot_cpp_bind ${SOURCES})
 target_link_libraries(uaibot_cpp_bind PRIVATE
     pybind11::pybind11      # Python headers + core
     pybind11::windows_extras  # Windows-specific optimizations
+    nanoflann              # Header-only library for nearest neighbor search
+    vertex_enumeration     # Header-only library for vertex enumeration
+    Eigen3::Eigen
 )
 
 target_include_directories(uaibot_cpp_bind PRIVATE ${EIGEN3_INCLUDE_DIR})
-target_link_libraries(uaibot_cpp_bind PRIVATE nanoflann)
+# target_link_libraries(uaibot_cpp_bind PRIVATE nanoflann)
 # Windows-specific linking
 if(WIN32)
     target_link_libraries(uaibot_cpp_bind PRIVATE ${Python3_LIBRARIES})

@@ -57,6 +57,8 @@ std::vector<Eigen::Vector3f> getFaceNormalVectors(
     const GeometricPrimitives& polyhedron);
 std::vector<Eigen::Vector3f> getEdgeVectors(
     const GeometricPrimitives& polyhedron);
+std::vector<Eigen::Vector3f> getPlatonicSolidEdges(
+    const GeometricPrimitives& polyhedron);
 std::vector<Eigen::Vector3f> getEdgeNormalVectors(
     const std::vector<Eigen::Vector3f>& edges1,
     const std::vector<Eigen::Vector3f>& edges2);
@@ -75,10 +77,16 @@ getCandidateNormals(std::vector<Eigen::Vector3f> faceNormals1,
 std::vector<Eigen::Vector3f> getNormalsVectors(const GeometricPrimitives& box);
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distBox2Box(const GeometricPrimitives& polyhedron1,
-            const GeometricPrimitives& polyhedron2, float gamma, bool isConservative = true);
+            const GeometricPrimitives& polyhedron2, float gamma,
+            bool isConservative = true, bool skipGradient = false);
+tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
+distSet2Set(const GeometricPrimitives& polyhedron1,
+            const GeometricPrimitives& polyhedron2, float gamma,
+            bool isConservative, bool skipGradient);
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distSet2Set(std::vector<Eigen::Vector3f> verticesA,
             std::vector<Eigen::Vector3f> verticesB,
             std::vector<Eigen::Vector3f> normalsA,
             std::vector<Eigen::Vector3f> normalsB,
-            std::vector<Eigen::Vector3f> edgeNormals, float gamma);
+            std::vector<Eigen::Vector3f> edgeNormals, float gamma,
+            bool skipGradient = false);

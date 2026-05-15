@@ -359,6 +359,120 @@ std::vector<Eigen::Vector3f> getFaceNormalVectors(
   }
 }
 
+std::vector<Eigen::Vector3f> getPlatonicSolidEdges(
+    const GeometricPrimitives& polyhedron) {
+  // This function should return the edge vectors for platonic solids (type 4)
+  // For simplicity, we can hardcode the edge vectors for the 5 platonic solids
+  // based on their vertices and faces.
+  if (polyhedron.type != 4) {
+    throw std::invalid_argument("Input must be a polytope primitive");
+  }
+  // Placeholder: return an empty vector for now
+  int numFaces = polyhedron.A.rows();
+  Eigen::Matrix4f htm = polyhedron.htm;
+  Eigen::Matrix3f R = htm.block<3, 3>(0, 0);
+  // Helper: given a set of vertices (in local frame), returns a unit vector
+  // for each edge (the directed vector from one vertex to its neighbour).
+  auto edges_from_vertices = [](const std::vector<Eigen::Vector3f>& vertices)
+      -> std::vector<Eigen::Vector3f> {
+    std::vector<Eigen::Vector3f> edges;
+    const int n = static_cast<int>(vertices.size());
+    if (n < 2) return edges;
+
+    // Find edge length as the smallest positive squared distance
+    float edge_len_sq = std::numeric_limits<float>::max();
+    for (int i = 0; i < n; ++i)
+      for (int j = i + 1; j < n; ++j) {
+        float d2 = (vertices[j] - vertices[i]).squaredNorm();
+        if (d2 > 1e-6f && d2 < edge_len_sq) edge_len_sq = d2;
+      }
+
+    float tol =
+        edge_len_sq * 1e-4f;  // relative tolerance for distance equality
+    for (int i = 0; i < n; ++i)
+      for (int j = i + 1; j < n; ++j) {
+        float d2 = (vertices[j] - vertices[i]).squaredNorm();
+        if (std::abs(d2 - edge_len_sq) < tol)
+          edges.push_back((vertices[j] - vertices[i]).normalized());
+      }
+    return edges;
+  };
+
+  std::vector<Eigen::Vector3f> canonical_edges;
+
+  if (numFaces == 4) {
+    // Tetrahedron (vertices: (1,1,1), (1,-1,-1), (-1,1,-1), (-1,-1,1))
+    canonical_edges = edges_from_vertices({{1.0f, 1.0f, 1.0f},
+                                           {1.0f, -1.0f, -1.0f},
+                                           {-1.0f, 1.0f, -1.0f},
+                                           {-1.0f, -1.0f, 1.0f}});
+  } else if (numFaces == 6) {
+    // Cube (vertices: all ±1)
+    canonical_edges = edges_from_vertices({{-1.0f, -1.0f, -1.0f},
+                                           {-1.0f, -1.0f, 1.0f},
+                                           {-1.0f, 1.0f, -1.0f},
+                                           {-1.0f, 1.0f, 1.0f},
+                                           {1.0f, -1.0f, -1.0f},
+                                           {1.0f, -1.0f, 1.0f},
+                                           {1.0f, 1.0f, -1.0f},
+                                           {1.0f, 1.0f, 1.0f}});
+  } else if (numFaces == 8) {
+    // Octahedron (vertices on axes)
+    canonical_edges = edges_from_vertices({{1.0f, 0.0f, 0.0f},
+                                           {-1.0f, 0.0f, 0.0f},
+                                           {0.0f, 1.0f, 0.0f},
+                                           {0.0f, -1.0f, 0.0f},
+                                           {0.0f, 0.0f, 1.0f},
+                                           {0.0f, 0.0f, -1.0f}});
+  } else if (numFaces == 12) {
+    // Dodecahedron (20 vertices)
+    const float phi = (1.0f + std::sqrt(5.0f)) / 2.0f;
+    const float inv_phi = 1.0f / phi;
+    std::vector<Eigen::Vector3f> verts;
+
+    // 8 vertices: (±1, ±1, ±1)
+    for (float x : {-1.0f, 1.0f})
+      for (float y : {-1.0f, 1.0f})
+        for (float z : {-1.0f, 1.0f}) verts.push_back({x, y, z});
+
+    // 12 vertices: cyclic permutations of (0, ±φ, ±1/φ)
+    for (float a : {-phi, phi})
+      for (float b : {-inv_phi, inv_phi}) {
+        verts.push_back({0.0f, a, b});
+        verts.push_back({b, 0.0f, a});
+        verts.push_back({a, b, 0.0f});
+      }
+
+    canonical_edges = edges_from_vertices(verts);
+  } else if (numFaces == 20) {
+    // Icosahedron (12 vertices)
+    const float phi = (1.0f + std::sqrt(5.0f)) / 2.0f;
+    std::vector<Eigen::Vector3f> verts;
+
+    // Cyclic permutations of (0, ±1, ±φ)
+    for (float b : {-1.0f, 1.0f})
+      for (float c : {-phi, phi}) {
+        verts.push_back({0.0f, b, c});
+        verts.push_back({c, 0.0f, b});
+        verts.push_back({b, c, 0.0f});
+      }
+
+    canonical_edges = edges_from_vertices(verts);
+  } else {
+    throw std::invalid_argument(
+        "Unsupported number of faces for platonic solid: " +
+        std::to_string(numFaces));
+  }
+
+  // Rotate all edge directions into world frame
+  std::vector<Eigen::Vector3f> world_edges;
+  world_edges.reserve(canonical_edges.size());
+  for (const auto& v : canonical_edges) {
+    world_edges.push_back((R * v).normalized());
+  }
+  return world_edges;
+}
+
 std::vector<Eigen::Vector3f> getEdgeVectors(
     const GeometricPrimitives& polyhedron) {
   // Returns a set with edge vectors for each edge of the polyhedron.
@@ -378,9 +492,9 @@ std::vector<Eigen::Vector3f> getEdgeVectors(
     edges[5] = -polyhedron.htm.block<3, 1>(0, 2);  // -Z direction
     return edges;
   } else if (polyhedron.type == 4) {
-    // Polytope case
-    throw std::invalid_argument(
-        "Edge vectors not implemented for polytopes yet");
+    // This currently only supports platonic solids
+    return getPlatonicSolidEdges(polyhedron);
+
   } else {
     throw std::invalid_argument("Unsupported primitive type for edge vectors");
   }
@@ -444,7 +558,7 @@ getCandidateNormals(std::vector<Eigen::Vector3f> faceNormals1,
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distBox2Box(const GeometricPrimitives& polyhedron1,
             const GeometricPrimitives& polyhedron2, float gamma,
-            bool isConservative) {
+            bool isConservative, bool skipGradient) {
   // Throw error if the inputs are not boxes (not Implemented yet)
   if (polyhedron1.type != 1 || polyhedron2.type != 1) {
     throw std::invalid_argument("Both inputs must be box primitives");
@@ -458,7 +572,49 @@ distBox2Box(const GeometricPrimitives& polyhedron1,
   std::vector<Eigen::Vector3f> normalsA = get<0>(normalsTuple);
   std::vector<Eigen::Vector3f> normalsB = get<1>(normalsTuple);
   std::vector<Eigen::Vector3f> edgeNormals = get<2>(normalsTuple);
-  return distSet2Set(A, B, normalsA, normalsB, edgeNormals, gamma);
+  return distSet2Set(A, B, normalsA, normalsB, edgeNormals, gamma,
+                     skipGradient);
+}
+
+tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
+distSet2Set(const GeometricPrimitives& polyhedron1,
+            const GeometricPrimitives& polyhedron2, float gamma,
+            bool isConservative, bool skipGradient) {
+  // Throw errors if type is different than 1 or 4 (not Implemented yet for
+  // non-polyhedra)
+  if ((polyhedron1.type != 1 && polyhedron1.type != 4) ||
+      (polyhedron2.type != 1 && polyhedron2.type != 4)) {
+    throw std::invalid_argument(
+        "Both inputs must be either box primitives or polytope primitives");
+  }
+  std::vector<Eigen::Vector3f> vertices1_local = polyhedron1.vertices_local;
+  std::vector<Eigen::Vector3f> vertices2_local = polyhedron2.vertices_local;
+  // Get A, B as the world vertices of the two polyhedra
+  Eigen::Matrix4f htm1 = polyhedron1.htm;
+  Eigen::Matrix4f htm2 = polyhedron2.htm;
+  std::vector<Eigen::Vector3f> A, B;
+  A.reserve(vertices1_local.size());
+  B.reserve(vertices2_local.size());
+
+  for (const auto& v : vertices1_local) {
+    Eigen::Vector4f vh(v.x(), v.y(), v.z(), 1.0f);
+    Eigen::Vector4f wh = htm1 * vh;
+    A.push_back(wh.head<3>());
+  }
+  for (const auto& v : vertices2_local) {
+    Eigen::Vector4f vh(v.x(), v.y(), v.z(), 1.0f);
+    Eigen::Vector4f wh = htm2 * vh;
+    B.push_back(wh.head<3>());
+  }
+  tuple<std::vector<Eigen::Vector3f>, std::vector<Eigen::Vector3f>,
+        std::vector<Eigen::Vector3f>>
+      normalsTuple =
+          getCandidateNormals(polyhedron1, polyhedron2, isConservative);
+  std::vector<Eigen::Vector3f> normalsA = get<0>(normalsTuple);
+  std::vector<Eigen::Vector3f> normalsB = get<1>(normalsTuple);
+  std::vector<Eigen::Vector3f> edgeNormals = get<2>(normalsTuple);
+  return distSet2Set(A, B, normalsA, normalsB, edgeNormals, gamma,
+                     skipGradient);
 }
 
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
@@ -466,7 +622,8 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
             std::vector<Eigen::Vector3f> verticesB,
             std::vector<Eigen::Vector3f> normalsA,
             std::vector<Eigen::Vector3f> normalsB,
-            std::vector<Eigen::Vector3f> edgeNormals, float gamma) {
+            std::vector<Eigen::Vector3f> edgeNormals, float gamma,
+            bool skipGradient) {
   // Returns a tuple with (distance, gradient w.r.t minkowski vertices, gradient
   // w.r.t A vertices, gradient w.r.t B vertices, gradient w.r.t normals) the
   // normals are ordered as [faceNormalsA, edgeNormals, faceNormalsB]
@@ -498,21 +655,31 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
     for (size_t j = 0; j < numV; ++j) {
       dotProducts[j] = d.dot(minkowskiVertices[j]);
     }
-    tuple<float, Eigen::VectorXf> res =
-        smoothMinListWithGradient(dotProducts, gamma);
-    float dist = get<0>(res);
-    Eigen::VectorXf grad = get<1>(res);
-    innerMins.push_back(dist);
-    // Store the gradient in the rows of the jacobian
-    dGn_dVc.row(i) = grad.transpose();  // Size 1 x numV
-    // if (i == 0) {
-    //   std::cout << "[DEBUG] jacobian row 0 sum: " << jacobian.row(0).sum()
-    //             << std::endl;
-    //   std::cout << "[DEBUG] jacobian row 0: " << jacobian.row(0) <<
-    //   std::endl;
-    // }
+    if (skipGradient) {
+      float dist = smoothMinList(dotProducts, gamma);
+      innerMins.push_back(dist);
+    } else {
+      tuple<float, Eigen::VectorXf> res =
+          smoothMinListWithGradient(dotProducts, gamma);
+      float dist = get<0>(res);
+      Eigen::VectorXf grad = get<1>(res);
+      innerMins.push_back(dist);
+      // Store the gradient in the rows of the jacobian
+      dGn_dVc.row(i) = grad.transpose();  // Size 1 x numV
+      // if (i == 0) {
+      //   std::cout << "[DEBUG] jacobian row 0 sum: " << jacobian.row(0).sum()
+      //             << std::endl;
+      //   std::cout << "[DEBUG] jacobian row 0: " << jacobian.row(0) <<
+      //   std::endl;
+      // }
+    }
   }
 
+  if (skipGradient) {
+    float finalDist = smoothMaxList(innerMins, gamma);
+    return make_tuple(finalDist, Eigen::VectorXf(), Eigen::MatrixXf(),
+                      Eigen::MatrixXf(), Eigen::MatrixXf());
+  }
   tuple<float, Eigen::VectorXf> finalRes =
       smoothMaxListWithGradient(innerMins, gamma);
   float finalDist = get<0>(finalRes);
@@ -700,5 +867,6 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
   // std::cout << "[DEBUG] Difference (tangential):\n"
   //           << (ana_grad_tangent - num_grad_normals) << std::endl;
   // -------------------------------------------------------------
-  return make_tuple(finalDist, gradVertsMinkowski, gradVertsA, gradVertsB, gradNormals);
+  return make_tuple(finalDist, gradVertsMinkowski, gradVertsA, gradVertsB,
+                    gradNormals);
 }
