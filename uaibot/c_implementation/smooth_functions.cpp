@@ -267,6 +267,8 @@ tuple<float, Eigen::VectorXf> smoothMaxListWithGradient(
   return smoothMaxListWithGradient(eigenV, r);
 }
 // ----------------------------------------------------------------------------------------
+// Auxiliary functions for distance computation
+// ----------------------------------------------------------------------------------------
 std::vector<Eigen::Vector3f> getBoxVertices(const GeometricPrimitives& box) {
   if (box.type != 1) {
     throw std::invalid_argument("Input must be a box primitive");
@@ -555,10 +557,37 @@ getCandidateNormals(std::vector<Eigen::Vector3f> faceNormals1,
   }
 }
 
+float shapingFunction(float u, float k, float epsilon) {
+  /* A k-th order shaping function that removes non-differentiability at 0,
+   * defined as: phi(u) = u * (|u|^k) / (|u|^k + epsilon)
+   */
+  float abs_u_k = pow(abs(u), k);
+  return u * (abs_u_k / (abs_u_k + epsilon));
+}
+std::tuple<float, float> shapingFunctionWithGradient(float u, float k,
+                                                     float epsilon) {
+  /* Returns the shaping function and its gradient w.r.t u, defined as:
+   *  phi(u) = u * (|u|^k) / (|u|^k + epsilon)
+   */
+  float abs_u = abs(u);
+  float abs_u_k = pow(abs_u, k);
+  float u_squared = u * u;
+  float abs_u_k_minus_2 = pow(abs_u, k - 2);
+  float abs_u_k_plus_2 = pow(abs_u, k + 2);
+  float dphi_du =
+      (abs_u_k_minus_2 * (abs_u_k_plus_2 + (k + 1) * epsilon * u_squared)) /
+      pow(abs_u_k + epsilon, 2);
+  float phi = u * (abs_u_k / (abs_u_k + epsilon));
+  return make_tuple(phi, dphi_du);
+}
+
+// ----------------------------------------------------------------------------------------
+// Distance functions
+// ----------------------------------------------------------------------------------------
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distBox2Box(const GeometricPrimitives& polyhedron1,
             const GeometricPrimitives& polyhedron2, float gamma,
-            bool isConservative, bool skipGradient) {
+            bool isConservative, bool skipGradient, float epsilon) {
   // Throw error if the inputs are not boxes (not Implemented yet)
   if (polyhedron1.type != 1 || polyhedron2.type != 1) {
     throw std::invalid_argument("Both inputs must be box primitives");
@@ -579,7 +608,7 @@ distBox2Box(const GeometricPrimitives& polyhedron1,
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distSet2Set(const GeometricPrimitives& polyhedron1,
             const GeometricPrimitives& polyhedron2, float gamma,
-            bool isConservative, bool skipGradient) {
+            bool isConservative, bool skipGradient, float epsilon) {
   // Throw errors if type is different than 1 or 4 (not Implemented yet for
   // non-polyhedra)
   if ((polyhedron1.type != 1 && polyhedron1.type != 4) ||
@@ -614,7 +643,7 @@ distSet2Set(const GeometricPrimitives& polyhedron1,
   std::vector<Eigen::Vector3f> normalsB = get<1>(normalsTuple);
   std::vector<Eigen::Vector3f> edgeNormals = get<2>(normalsTuple);
   return distSet2Set(A, B, normalsA, normalsB, edgeNormals, gamma,
-                     skipGradient);
+                     skipGradient, epsilon);
 }
 
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
@@ -623,12 +652,16 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
             std::vector<Eigen::Vector3f> normalsA,
             std::vector<Eigen::Vector3f> normalsB,
             std::vector<Eigen::Vector3f> edgeNormals, float gamma,
-            bool skipGradient) {
+            bool skipGradient, float epsilon) {
   // Returns a tuple with (distance, gradient w.r.t minkowski vertices, gradient
   // w.r.t A vertices, gradient w.r.t B vertices, gradient w.r.t normals) the
   // normals are ordered as [faceNormalsA, edgeNormals, faceNormalsB]
   int numA = verticesA.size();
   int numB = verticesB.size();
+  // TODO: remove this when gamma is updated
+  // previously 0 < gamma < 1, now we set gamma = 1/(gamma'+1) and use gamma'
+  // shaping function uses gamma'
+  float gamma_mod = (1 / gamma) - 1;
 
   std::vector<Eigen::Vector3f> minkowskiVertices =
       getMinkowskiDifference(verticesA, verticesB);
@@ -657,15 +690,19 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
     }
     if (skipGradient) {
       float dist = smoothMinList(dotProducts, gamma);
-      innerMins.push_back(dist);
+      float dist_mod = shapingFunction(dist, gamma_mod, epsilon);
+      innerMins.push_back(dist_mod);
     } else {
       tuple<float, Eigen::VectorXf> res =
           smoothMinListWithGradient(dotProducts, gamma);
       float dist = get<0>(res);
       Eigen::VectorXf grad = get<1>(res);
-      innerMins.push_back(dist);
+      tuple<float, float> res_mod = shapingFunctionWithGradient(dist, gamma_mod, epsilon);
+      float dist_mod = get<0>(res_mod);
+      float dphi_du = get<1>(res_mod);
+      innerMins.push_back(dist_mod);
       // Store the gradient in the rows of the jacobian
-      dGn_dVc.row(i) = grad.transpose();  // Size 1 x numV
+      dGn_dVc.row(i) = grad.transpose() * dphi_du;  // Size 1 x numV
       // if (i == 0) {
       //   std::cout << "[DEBUG] jacobian row 0 sum: " << jacobian.row(0).sum()
       //             << std::endl;
@@ -677,7 +714,8 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
 
   if (skipGradient) {
     float finalDist = smoothMaxList(innerMins, gamma);
-    return make_tuple(finalDist, Eigen::VectorXf(), Eigen::MatrixXf(),
+    float finalDist_mod = shapingFunction(finalDist, gamma_mod, epsilon);
+    return make_tuple(finalDist_mod, Eigen::VectorXf(), Eigen::MatrixXf(),
                       Eigen::MatrixXf(), Eigen::MatrixXf());
   }
   tuple<float, Eigen::VectorXf> finalRes =
@@ -689,6 +727,11 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
   // std::cout << "[DEBUG] gradSmax: " << gradSmax.transpose() << std::endl;
   // Apply chain rule to get the gradient with respect to the Minkowski
   // vertices
+  tuple<float, float> res_mod = shapingFunctionWithGradient(finalDist, gamma_mod, epsilon);
+  // For simplicity, we change the variables themselves to avoid changing the other loops
+  finalDist = get<0>(res_mod);
+  float dphi_du = get<1>(res_mod);
+  gradSmax *= dphi_du;
   Eigen::VectorXf gradVertsMinkowski = Eigen::VectorXf::Zero(numV);
   gradVertsMinkowski = gradSmax.transpose() * dGn_dVc;  // Size 1 x numV
 

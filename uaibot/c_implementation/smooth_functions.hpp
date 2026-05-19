@@ -6,7 +6,7 @@
 using namespace std;
 
 // ----------------------------------------------------------------------------------------
-// // Smooth Min / Max functions
+// Smooth Min / Max functions
 // ----------------------------------------------------------------------------------------
 
 float holderMean(float x, float y, float r);
@@ -44,7 +44,7 @@ tuple<float, Eigen::VectorXf> smoothMaxListWithGradient(
     const std::vector<float>& values, float r);
 
 // ----------------------------------------------------------------------------------------
-// // Distance related smooth functions
+// Auxiliary functions for distance computation
 // ----------------------------------------------------------------------------------------
 
 std::vector<Eigen::Vector3f> getBoxVertices(const GeometricPrimitives& box);
@@ -75,18 +75,25 @@ getCandidateNormals(std::vector<Eigen::Vector3f> faceNormals1,
                     std::vector<Eigen::Vector3f> edges2, bool isConservative);
 
 std::vector<Eigen::Vector3f> getNormalsVectors(const GeometricPrimitives& box);
+float shapingFunction(float u, float k, float epsilon);
+std::tuple<float, float> shapingFunctionWithGradient(float u, float k,
+                                                     float epsilon);
+
+// ----------------------------------------------------------------------------------------
+// Distance functions
+// ----------------------------------------------------------------------------------------
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distBox2Box(const GeometricPrimitives& polyhedron1,
             const GeometricPrimitives& polyhedron2, float gamma,
-            bool isConservative = true, bool skipGradient = false);
+            bool isConservative = true, bool skipGradient = false, float epsilon = 1e-6f);
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distSet2Set(const GeometricPrimitives& polyhedron1,
             const GeometricPrimitives& polyhedron2, float gamma,
-            bool isConservative, bool skipGradient);
+            bool isConservative, bool skipGradient, float epsilon = 1e-6f);
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distSet2Set(std::vector<Eigen::Vector3f> verticesA,
             std::vector<Eigen::Vector3f> verticesB,
             std::vector<Eigen::Vector3f> normalsA,
             std::vector<Eigen::Vector3f> normalsB,
             std::vector<Eigen::Vector3f> edgeNormals, float gamma,
-            bool skipGradient = false);
+            bool skipGradient = false, float epsilon = 1e-6f);
