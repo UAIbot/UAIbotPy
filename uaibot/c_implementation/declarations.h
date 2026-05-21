@@ -346,7 +346,7 @@ struct Manipulator {
                                         float eps) const;
   DistStructRobotObj signedDistance(GeometricPrimitives obj, VectorXf q,
                                     Matrix4f htm, float max_dist, float gamma,
-                                    bool isConservative) const;
+                                    bool isConservative, float epsilon) const;
 
   DistStructRobotAuto signedDistanceAuto(VectorXf q, float max_dist,
                                          float gamma,

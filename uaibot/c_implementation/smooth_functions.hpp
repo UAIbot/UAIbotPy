@@ -9,39 +9,39 @@ using namespace std;
 // Smooth Min / Max functions
 // ----------------------------------------------------------------------------------------
 
-float holderMean(float x, float y, float r);
-Eigen::VectorXf holderMeanGradient(float x, float y, float r);
-tuple<float, Eigen::VectorXf> holderMeanWithGradient(float x, float y, float r);
+float holderMean(float x, float y, float gamma);
+Eigen::VectorXf holderMeanGradient(float x, float y, float gamma);
+tuple<float, Eigen::VectorXf> holderMeanWithGradient(float x, float y, float gamma);
 // Min
-float smoothMin2Elements(float x, float y, float r);
-Eigen::VectorXf smoothMin2ElementsGradient(float x, float y, float r);
+float smoothMin2Elements(float x, float y, float gamma);
+Eigen::VectorXf smoothMin2ElementsGradient(float x, float y, float gamma);
 tuple<float, Eigen::VectorXf> smoothMin2ElementsWithGradient(float x, float y,
-                                                             float r);
-float smoothMinList(const Eigen::VectorXf& values, float r);
-Eigen::VectorXf smoothMinListGradient(const Eigen::VectorXf& values, float r);
+                                                             float gamma);
+float smoothMinList(const Eigen::VectorXf& values, float gamma);
+Eigen::VectorXf smoothMinListGradient(const Eigen::VectorXf& values, float gamma);
 tuple<float, Eigen::VectorXf> smoothMinListWithGradient(
-    const Eigen::VectorXf& values, float r);
+    const Eigen::VectorXf& values, float gamma);
 // Overloads
-float smoothMinList(const std::vector<float>& values, float r);
+float smoothMinList(const std::vector<float>& values, float gamma);
 Eigen::VectorXf smoothMinListGradient(const std::vector<float>& values,
-                                      float r);
+                                      float gamma);
 tuple<float, Eigen::VectorXf> smoothMinListWithGradient(
-    const std::vector<float>& values, float r);
+    const std::vector<float>& values, float gamma);
 // Max
-float smoothMax2Elements(float x, float y, float r);
-Eigen::VectorXf smoothMax2ElementsGradient(float x, float y, float r);
+float smoothMax2Elements(float x, float y, float gamma);
+Eigen::VectorXf smoothMax2ElementsGradient(float x, float y, float gamma);
 tuple<float, Eigen::VectorXf> smoothMax2ElementsWithGradient(float x, float y,
-                                                             float r);
-float smoothMaxList(const Eigen::VectorXf& values, float r);
-Eigen::VectorXf smoothMaxListGradient(const Eigen::VectorXf& values, float r);
+                                                             float gamma);
+float smoothMaxList(const Eigen::VectorXf& values, float gamma);
+Eigen::VectorXf smoothMaxListGradient(const Eigen::VectorXf& values, float gamma);
 tuple<float, Eigen::VectorXf> smoothMaxListWithGradient(
-    const Eigen::VectorXf& values, float r);
+    const Eigen::VectorXf& values, float gamma);
 // Overloads
-float smoothMaxList(const std::vector<float>& values, float r);
+float smoothMaxList(const std::vector<float>& values, float gamma);
 Eigen::VectorXf smoothMaxListGradient(const std::vector<float>& values,
-                                      float r);
+                                      float gamma);
 tuple<float, Eigen::VectorXf> smoothMaxListWithGradient(
-    const std::vector<float>& values, float r);
+    const std::vector<float>& values, float gamma);
 
 // ----------------------------------------------------------------------------------------
 // Auxiliary functions for distance computation
@@ -89,7 +89,7 @@ distBox2Box(const GeometricPrimitives& polyhedron1,
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distSet2Set(const GeometricPrimitives& polyhedron1,
             const GeometricPrimitives& polyhedron2, float gamma,
-            bool isConservative, bool skipGradient, float epsilon = 1e-6f);
+            bool isConservative = true, bool skipGradient = false, float epsilon = 1e-6f);
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
 distSet2Set(std::vector<Eigen::Vector3f> verticesA,
             std::vector<Eigen::Vector3f> verticesB,

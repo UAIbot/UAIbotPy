@@ -14,7 +14,9 @@ using namespace std;
 // Smooth Min / Max functions
 // ----------------------------------------------------------------------------------------
 
-float holderMean(float x, float y, float r) {
+float holderMean(float x, float y, float gamma) {
+  float r = 1 / (gamma +
+                 1);  // Old variable was 0 < r < 1, but integer gamma is easier
   // Eigen::VectorXf powered = values.array().pow(-1.0f / r);
   // Stabler version:
   // If any value is zero, return 0
@@ -29,7 +31,9 @@ float holderMean(float x, float y, float r) {
   return minValue * pow(sumPowered, -r);
 }
 
-Eigen::VectorXf holderMeanGradient(float x, float y, float r) {
+Eigen::VectorXf holderMeanGradient(float x, float y, float gamma) {
+  float r = 1 / (gamma +
+                 1);  // Old variable was 0 < r < 1, but integer gamma is easier
   float eps = 1e-6f;
   Eigen::VectorXf gradient(2);
   float dfdx;
@@ -66,33 +70,34 @@ Eigen::VectorXf holderMeanGradient(float x, float y, float r) {
 }
 
 tuple<float, Eigen::VectorXf> holderMeanWithGradient(float x, float y,
-                                                     float r) {
-  float mean = holderMean(x, y, r);
-  Eigen::VectorXf gradient = holderMeanGradient(x, y, r);
+                                                     float gamma) {
+  float mean = holderMean(x, y, gamma);
+  Eigen::VectorXf gradient = holderMeanGradient(x, y, gamma);
   return make_tuple(mean, gradient);
 }
 
 // Min
-float smoothMin2Elements(float x, float y, float r) {
+float smoothMin2Elements(float x, float y, float gamma) {
   if (x >= 0.0f && y >= 0.0f) {
-    return holderMean(x, y, r);
+    return holderMean(x, y, gamma);
   } else if (x < 0.0f && y < 0.0f) {
     float xbar = -1.0f / x;
     float ybar = -1.0f / y;
-    float res = holderMean(xbar, ybar, r);
+    float res = holderMean(xbar, ybar, gamma);
     return -1.0f / res;
   } else {
     return std::min(x, y);
   }
 }
 
-Eigen::VectorXf smoothMin2ElementsGradient(float x, float y, float r) {
+Eigen::VectorXf smoothMin2ElementsGradient(float x, float y, float gamma) {
   if (x >= 0.0f && y >= 0.0f) {
-    return holderMeanGradient(x, y, r);
+    return holderMeanGradient(x, y, gamma);
   } else if (x < 0.0f && y < 0.0f) {
     float xbar = -1.0f / x;
     float ybar = -1.0f / y;
-    tuple<float, Eigen::VectorXf> res = holderMeanWithGradient(xbar, ybar, r);
+    tuple<float, Eigen::VectorXf> res =
+        holderMeanWithGradient(xbar, ybar, gamma);
     float value = get<0>(res);
     Eigen::VectorXf grad = get<1>(res);
     Eigen::VectorXf chain(2);
@@ -126,13 +131,13 @@ Eigen::VectorXf smoothMin2ElementsGradient(float x, float y, float r) {
 }
 
 tuple<float, Eigen::VectorXf> smoothMin2ElementsWithGradient(float x, float y,
-                                                             float r) {
-  float value = smoothMin2Elements(x, y, r);
-  Eigen::VectorXf gradient = smoothMin2ElementsGradient(x, y, r);
+                                                             float gamma) {
+  float value = smoothMin2Elements(x, y, gamma);
+  Eigen::VectorXf gradient = smoothMin2ElementsGradient(x, y, gamma);
   return make_tuple(value, gradient);
 }
 
-float smoothMinList(const Eigen::VectorXf& values, float r) {
+float smoothMinList(const Eigen::VectorXf& values, float gamma) {
   if (values.size() == 0) {
     throw invalid_argument("List of values cannot be empty");
   }
@@ -141,18 +146,19 @@ float smoothMinList(const Eigen::VectorXf& values, float r) {
   }
   float minValue = values[0];
   for (Eigen::Index i = 1; i < values.size(); ++i) {
-    minValue = smoothMin2Elements(minValue, values[i], r);
+    minValue = smoothMin2Elements(minValue, values[i], gamma);
   }
   return minValue;
 }
 
-float smoothMinList(const std::vector<float>& values, float r) {
+float smoothMinList(const std::vector<float>& values, float gamma) {
   // Convert std::vector<float> to Eigen::VectorXf and call the other function
   Eigen::Map<const Eigen::VectorXf> eigenV(values.data(), values.size());
-  return smoothMinList(eigenV, r);
+  return smoothMinList(eigenV, gamma);
 }
 
-Eigen::VectorXf smoothMinListGradient(const Eigen::VectorXf& values, float r) {
+Eigen::VectorXf smoothMinListGradient(const Eigen::VectorXf& values,
+                                      float gamma) {
   if (values.size() == 0) {
     throw invalid_argument("List of values cannot be empty");
   }
@@ -168,7 +174,7 @@ Eigen::VectorXf smoothMinListGradient(const Eigen::VectorXf& values, float r) {
 
   for (int i = n - 2; i >= 0; --i) {
     tuple<float, Eigen::VectorXf> res =
-        smoothMin2ElementsWithGradient(values[i], minValue, r);
+        smoothMin2ElementsWithGradient(values[i], minValue, gamma);
     minValue = get<0>(res);
     Eigen::VectorXf localGrad = get<1>(res);
     float left = localGrad(0);
@@ -180,60 +186,61 @@ Eigen::VectorXf smoothMinListGradient(const Eigen::VectorXf& values, float r) {
 }
 
 Eigen::VectorXf smoothMinListGradient(const std::vector<float>& values,
-                                      float r) {
+                                      float gamma) {
   // Convert std::vector<float> to Eigen::VectorXf and call the other function
   Eigen::Map<const Eigen::VectorXf> eigenV(values.data(), values.size());
-  return smoothMinListGradient(eigenV, r);
+  return smoothMinListGradient(eigenV, gamma);
 }
 
 tuple<float, Eigen::VectorXf> smoothMinListWithGradient(
-    const Eigen::VectorXf& values, float r) {
-  float value = smoothMinList(values, r);
-  Eigen::VectorXf gradient = smoothMinListGradient(values, r);
+    const Eigen::VectorXf& values, float gamma) {
+  float value = smoothMinList(values, gamma);
+  Eigen::VectorXf gradient = smoothMinListGradient(values, gamma);
   return make_tuple(value, gradient);
 }
 
 tuple<float, Eigen::VectorXf> smoothMinListWithGradient(
-    const std::vector<float>& values, float r) {
+    const std::vector<float>& values, float gamma) {
   // Convert std::vector<float> to Eigen::VectorXf and call the other function
   Eigen::Map<const Eigen::VectorXf> eigenV(values.data(), values.size());
-  return smoothMinListWithGradient(eigenV, r);
+  return smoothMinListWithGradient(eigenV, gamma);
 }
 
 // Max
-float smoothMax2Elements(float x, float y, float r) {
-  return -smoothMin2Elements(-x, -y, r);
+float smoothMax2Elements(float x, float y, float gamma) {
+  return -smoothMin2Elements(-x, -y, gamma);
 }
 
-Eigen::VectorXf smoothMax2ElementsGradient(float x, float y, float r) {
-  return smoothMin2ElementsGradient(-x, -y, r);
+Eigen::VectorXf smoothMax2ElementsGradient(float x, float y, float gamma) {
+  return smoothMin2ElementsGradient(-x, -y, gamma);
 }
 
 tuple<float, Eigen::VectorXf> smoothMax2ElementsWithGradient(float x, float y,
-                                                             float r) {
-  float value = smoothMax2Elements(x, y, r);
-  Eigen::VectorXf gradient = smoothMax2ElementsGradient(x, y, r);
+                                                             float gamma) {
+  float value = smoothMax2Elements(x, y, gamma);
+  Eigen::VectorXf gradient = smoothMax2ElementsGradient(x, y, gamma);
   return make_tuple(value, gradient);
 }
 
-float smoothMaxList(const Eigen::VectorXf& values, float r) {
+float smoothMaxList(const Eigen::VectorXf& values, float gamma) {
   if (values.size() == 0) {
     throw invalid_argument("List of values cannot be empty");
   }
   if (values.size() == 1) {
     return values[0];
   }
-  float maxValue = -smoothMinList(-values, r);
+  float maxValue = -smoothMinList(-values, gamma);
   return maxValue;
 }
 
-float smoothMaxList(const std::vector<float>& values, float r) {
+float smoothMaxList(const std::vector<float>& values, float gamma) {
   // Convert std::vector<float> to Eigen::VectorXf and call the other function
   Eigen::Map<const Eigen::VectorXf> eigenV(values.data(), values.size());
-  return smoothMaxList(eigenV, r);
+  return smoothMaxList(eigenV, gamma);
 }
 
-Eigen::VectorXf smoothMaxListGradient(const Eigen::VectorXf& values, float r) {
+Eigen::VectorXf smoothMaxListGradient(const Eigen::VectorXf& values,
+                                      float gamma) {
   if (values.size() == 0) {
     throw invalid_argument("List of values cannot be empty");
   }
@@ -242,29 +249,29 @@ Eigen::VectorXf smoothMaxListGradient(const Eigen::VectorXf& values, float r) {
     gradient << 1.0f;
     return gradient;
   }
-  Eigen::VectorXf gradient = smoothMinListGradient(-values, r);
+  Eigen::VectorXf gradient = smoothMinListGradient(-values, gamma);
   return gradient;
 }
 
 Eigen::VectorXf smoothMaxListGradient(const std::vector<float>& values,
-                                      float r) {
+                                      float gamma) {
   // Convert std::vector<float> to Eigen::VectorXf and call the other function
   Eigen::Map<const Eigen::VectorXf> eigenV(values.data(), values.size());
-  return smoothMaxListGradient(eigenV, r);
+  return smoothMaxListGradient(eigenV, gamma);
 }
 
 tuple<float, Eigen::VectorXf> smoothMaxListWithGradient(
-    const Eigen::VectorXf& values, float r) {
-  float value = smoothMaxList(values, r);
-  Eigen::VectorXf gradient = smoothMaxListGradient(values, r);
+    const Eigen::VectorXf& values, float gamma) {
+  float value = smoothMaxList(values, gamma);
+  Eigen::VectorXf gradient = smoothMaxListGradient(values, gamma);
   return make_tuple(value, gradient);
 }
 
 tuple<float, Eigen::VectorXf> smoothMaxListWithGradient(
-    const std::vector<float>& values, float r) {
+    const std::vector<float>& values, float gamma) {
   // Convert std::vector<float> to Eigen::VectorXf and call the other function
   Eigen::Map<const Eigen::VectorXf> eigenV(values.data(), values.size());
-  return smoothMaxListWithGradient(eigenV, r);
+  return smoothMaxListWithGradient(eigenV, gamma);
 }
 // ----------------------------------------------------------------------------------------
 // Auxiliary functions for distance computation
@@ -566,7 +573,7 @@ float shapingFunction(float u, float k, float epsilon) {
 }
 std::tuple<float, float> shapingFunctionWithGradient(float u, float k,
                                                      float epsilon) {
-  /* Returns the shaping function and its gradient w.r.t u, defined as:
+  /* Returns the k-th order shaping function and its gradient w.r.t u, defined as:
    *  phi(u) = u * (|u|^k) / (|u|^k + epsilon)
    */
   float abs_u = abs(u);
@@ -574,9 +581,13 @@ std::tuple<float, float> shapingFunctionWithGradient(float u, float k,
   float u_squared = u * u;
   float abs_u_k_minus_2 = pow(abs_u, k - 2);
   float abs_u_k_plus_2 = pow(abs_u, k + 2);
-  float dphi_du =
-      (abs_u_k_minus_2 * (abs_u_k_plus_2 + (k + 1) * epsilon * u_squared)) /
-      pow(abs_u_k + epsilon, 2);
+  float eps_pow = pow(abs_u_k + epsilon, 2);
+  float dphi_du = 0.0;
+  if (eps_pow > 1e-6) {
+    float dphi_du =
+        (abs_u_k_minus_2 * (abs_u_k_plus_2 + (k + 1) * epsilon * u_squared)) /
+        eps_pow;
+  }
   float phi = u * (abs_u_k / (abs_u_k + epsilon));
   return make_tuple(phi, dphi_du);
 }
@@ -601,8 +612,8 @@ distBox2Box(const GeometricPrimitives& polyhedron1,
   std::vector<Eigen::Vector3f> normalsA = get<0>(normalsTuple);
   std::vector<Eigen::Vector3f> normalsB = get<1>(normalsTuple);
   std::vector<Eigen::Vector3f> edgeNormals = get<2>(normalsTuple);
-  return distSet2Set(A, B, normalsA, normalsB, edgeNormals, gamma,
-                     skipGradient);
+  return distSet2Set(A, B, normalsA, normalsB, edgeNormals, gamma, skipGradient,
+                     epsilon);
 }
 
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
@@ -642,8 +653,8 @@ distSet2Set(const GeometricPrimitives& polyhedron1,
   std::vector<Eigen::Vector3f> normalsA = get<0>(normalsTuple);
   std::vector<Eigen::Vector3f> normalsB = get<1>(normalsTuple);
   std::vector<Eigen::Vector3f> edgeNormals = get<2>(normalsTuple);
-  return distSet2Set(A, B, normalsA, normalsB, edgeNormals, gamma,
-                     skipGradient, epsilon);
+  return distSet2Set(A, B, normalsA, normalsB, edgeNormals, gamma, skipGradient,
+                     epsilon);
 }
 
 tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf>
@@ -661,7 +672,7 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
   // TODO: remove this when gamma is updated
   // previously 0 < gamma < 1, now we set gamma = 1/(gamma'+1) and use gamma'
   // shaping function uses gamma'
-  float gamma_mod = (1 / gamma) - 1;
+  // float gamma_mod = (1 - gamma) / gamma;
 
   std::vector<Eigen::Vector3f> minkowskiVertices =
       getMinkowskiDifference(verticesA, verticesB);
@@ -690,14 +701,15 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
     }
     if (skipGradient) {
       float dist = smoothMinList(dotProducts, gamma);
-      float dist_mod = shapingFunction(dist, gamma_mod, epsilon);
+      float dist_mod = shapingFunction(dist, gamma, epsilon);
       innerMins.push_back(dist_mod);
     } else {
       tuple<float, Eigen::VectorXf> res =
           smoothMinListWithGradient(dotProducts, gamma);
       float dist = get<0>(res);
       Eigen::VectorXf grad = get<1>(res);
-      tuple<float, float> res_mod = shapingFunctionWithGradient(dist, gamma_mod, epsilon);
+      tuple<float, float> res_mod =
+          shapingFunctionWithGradient(dist, gamma, epsilon);
       float dist_mod = get<0>(res_mod);
       float dphi_du = get<1>(res_mod);
       innerMins.push_back(dist_mod);
@@ -714,7 +726,7 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
 
   if (skipGradient) {
     float finalDist = smoothMaxList(innerMins, gamma);
-    float finalDist_mod = shapingFunction(finalDist, gamma_mod, epsilon);
+    float finalDist_mod = shapingFunction(finalDist, gamma, epsilon);
     return make_tuple(finalDist_mod, Eigen::VectorXf(), Eigen::MatrixXf(),
                       Eigen::MatrixXf(), Eigen::MatrixXf());
   }
@@ -727,8 +739,11 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
   // std::cout << "[DEBUG] gradSmax: " << gradSmax.transpose() << std::endl;
   // Apply chain rule to get the gradient with respect to the Minkowski
   // vertices
-  tuple<float, float> res_mod = shapingFunctionWithGradient(finalDist, gamma_mod, epsilon);
-  // For simplicity, we change the variables themselves to avoid changing the other loops
+  tuple<float, float> res_mod =
+      shapingFunctionWithGradient(finalDist, gamma, epsilon);
+  // For simplicity, we change the variables themselves to avoid changing the
+  // other loops
+  float Deletethisvariable = finalDist;
   finalDist = get<0>(res_mod);
   float dphi_du = get<1>(res_mod);
   gradSmax *= dphi_du;
@@ -774,142 +789,6 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
           w_i * dGn_dVc(i, vIdx) * minkowskiVertices[vIdx].transpose();
     }
   }
-  // TODO: Remove this later
-  // DEBUGGING STUFF
-  // // Lambda to compute scalar distance given box1 vertices P_mod
-  // auto computeDistance =
-  //     [&](const std::vector<Eigen::Vector3f>& P_mod) -> float {
-  //   std::vector<Eigen::Vector3f> minkowski_mod;
-  //   minkowski_mod.reserve(numA * numB);
-  //   for (const auto& p : P_mod)
-  //     for (const auto& r : R) minkowski_mod.push_back(p - r);
-  //
-  //   std::vector<float> innerMins_mod;
-  //   for (size_t i = 0; i < numN; ++i) {
-  //     Eigen::Vector3f d = normalsSet[i].normalized();
-  //     std::vector<float> dots(numV);
-  //     for (size_t j = 0; j < numV; ++j) dots[j] = d.dot(minkowski_mod[j]);
-  //     float dist_mod = std::get<0>(smoothMinListWithGradient(dots, r));
-  //     innerMins_mod.push_back(dist_mod);
-  //   }
-  //   return std::get<0>(smoothMaxListWithGradient(innerMins_mod, r));
-  // };
-  // // ----- DEBUG: Numerical per-vertex gradient check -----
-  // float eps = 1e-4f;
-  // Eigen::MatrixXf num_grad_box1(num_P, 3);
-  // for (int v = 0; v < numA; ++v) {
-  //   for (int axis = 0; axis < 3; ++axis) {
-  //     Eigen::Vector3f delta = Eigen::Vector3f::Zero();
-  //     delta(axis) = eps;
-  //
-  //     std::vector<Eigen::Vector3f> P_plus = P;
-  //     P_plus[v] += delta;
-  //     float D_plus = computeDistance(P_plus);
-  //
-  //     std::vector<Eigen::Vector3f> P_minus = P;
-  //     P_minus[v] -= delta;
-  //     float D_minus = computeDistance(P_minus);
-  //
-  //     num_grad_box1(v, axis) = (D_plus - D_minus) / (2.0f * eps);
-  //   }
-  // }
-  // std::cout << "[DEBUG] Analytical grad_box1:\n" << grad_box1 << std::endl;
-  // std::cout << "[DEBUG] Numerical grad_box1:\n" << num_grad_box1 <<
-  // std::endl; std::cout << "[DEBUG] Difference:\n"
-  //           << (grad_box1 - num_grad_box1) << std::endl;
-  // // --------------------------------------------------------
-  // Eigen::Vector3f ana_grad_t = grad_box1.colwise().sum();
-  // Eigen::Vector3f num_grad_t = num_grad_box1.colwise().sum();
-  // std::cout << "[DEBUG] Analytical translation grad: " <<
-  // ana_grad_t.transpose()
-  //           << std::endl;
-  // std::cout << "[DEBUG] Numerical  translation grad: " <<
-  // num_grad_t.transpose()
-  //           << std::endl;
-  //
-  // ----- DEBUG: Numerical normal gradient check (rotation-based) -----
-  // auto computeDistanceWithNormal = [&](int normal_idx,
-  //                                      const Eigen::Vector3f& n_mod) ->
-  //                                      float
-  //                                      {
-  //   // Recompute only the smooth min for the modified normal, then redo
-  //   smooth
-  //   // max
-  //   std::vector<float> innerMins_mod = innerMins;  // copy original inner
-  //   mins
-  //   // Recompute the entry for the modified normal
-  //   Eigen::Vector3f d_mod = n_mod.normalized();
-  //   std::vector<float> dots_mod(numV);
-  //   for (int j = 0; j < numV; ++j) {
-  //     dots_mod[j] = d_mod.dot(minkowskiVertices[j]);
-  //   }
-  //   innerMins_mod[normal_idx] =
-  //       std::get<0>(smoothMinListWithGradient(dots_mod, r));
-  //   return std::get<0>(smoothMaxListWithGradient(innerMins_mod, r));
-  // };
-  // Eigen::MatrixXf num_grad_normals(num_N, 3);
-  // float rot_eps = 1e-4f;  // small rotation angle in radians
-  //
-  // for (int i = 0; i < numN; ++i) {
-  //   Eigen::Vector3f n_orig = normalsSet[i].normalized();
-  //
-  //   // Build two orthonormal tangent vectors
-  //   Eigen::Vector3f t1, t2;
-  //   if (std::abs(n_orig.x()) > std::abs(n_orig.y()))
-  //     t1 = Eigen::Vector3f(-n_orig.z(), 0.0f, n_orig.x()).normalized();
-  //   else
-  //     t1 = Eigen::Vector3f(0.0f, n_orig.z(), -n_orig.y()).normalized();
-  //   t2 = n_orig.cross(t1).normalized();
-  //
-  //   // Lambda to rotate n_orig around axis 'u' by angle 'theta'
-  //   auto rotate = [&](const Eigen::Vector3f& u,
-  //                     float theta) -> Eigen::Vector3f {
-  //     Eigen::AngleAxisf rot(theta, u);
-  //     return rot * n_orig;
-  //   };
-  //
-  //   // Numerical derivatives w.r.t. rotation around t1 and t2
-  //   float D_plus_t1 = computeDistanceWithNormal(i, rotate(t1, rot_eps));
-  //   float D_minus_t1 = computeDistanceWithNormal(i, rotate(t1, -rot_eps));
-  //   float dD_dtheta1 = (D_plus_t1 - D_minus_t1) / (2.0f * rot_eps);
-  //
-  //   float D_plus_t2 = computeDistanceWithNormal(i, rotate(t2, rot_eps));
-  //   float D_minus_t2 = computeDistanceWithNormal(i, rotate(t2, -rot_eps));
-  //   float dD_dtheta2 = (D_plus_t2 - D_minus_t2) / (2.0f * rot_eps);
-  //
-  //   // The relation: dD = (∂D/∂n)·dn, with dn = (u × n) dθ.
-  //   // So dD/dθ = (∂D/∂n)·(u × n).
-  //   // For u = t1, u × n = t2 (since t1,t2,n form right-handed orthonormal)
-  //   // For u = t2, u × n = -t1.
-  //   // Therefore:
-  //   // dD_dtheta1 = grad_n · t2
-  //   // dD_dtheta2 = grad_n · (-t1)
-  //   // Solve for grad_n (projected onto tangent plane):
-  //   Eigen::Vector3f num_grad_tangent = dD_dtheta1 * t2 - dD_dtheta2 * t1;
-  //
-  //   // The full analytical gradient (may have a component along n, but that
-  //   is
-  //   // zero for unit vector constraint) We only compare the tangential
-  //   part. num_grad_normals.row(i) = num_grad_tangent.transpose();
-  // }
-  //
-  // // For comparison, project analytical gradient onto tangent plane
-  // Eigen::MatrixXf ana_grad_tangent(num_N, 3);
-  // for (int i = 0; i < numN; ++i) {
-  //   Eigen::Vector3f n = normalsSet[i].normalized();
-  //   Eigen::Vector3f ana = grad_normals.row(i).transpose();
-  //   // Remove component along n (should be zero anyway, but for safety)
-  //   Eigen::Vector3f ana_tan = ana - (ana.dot(n)) * n;
-  //   ana_grad_tangent.row(i) = ana_tan.transpose();
-  // }
-  //
-  // std::cout << "[DEBUG] Analytical grad_normals (tangential part):\n"
-  //           << ana_grad_tangent << std::endl;
-  // std::cout << "[DEBUG] Numerical grad_normals (tangential):\n"
-  //           << num_grad_normals << std::endl;
-  // std::cout << "[DEBUG] Difference (tangential):\n"
-  //           << (ana_grad_tangent - num_grad_normals) << std::endl;
-  // -------------------------------------------------------------
   return make_tuple(finalDist, gradVertsMinkowski, gradVertsA, gradVertsB,
                     gradNormals);
 }
