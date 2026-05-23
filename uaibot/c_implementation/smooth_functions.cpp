@@ -488,17 +488,22 @@ std::vector<Eigen::Vector3f> getEdgeVectors(
   if (polyhedron.type == 1) {
     // Box case
     // The edges of a box are aligned with the local axes
-    // We avoid redundant edges, reducing 12->6 edge vectors
-    std::vector<Eigen::Vector3f> edges(6);
+    std::vector<Eigen::Vector3f> edges(12);
     // Edge vector parallel to local X
     edges[0] = polyhedron.htm.block<3, 1>(0, 0);   // +X direction
-    edges[1] = -polyhedron.htm.block<3, 1>(0, 0);  // -X direction
+    edges[1] = polyhedron.htm.block<3, 1>(0, 0);
+    edges[2] = polyhedron.htm.block<3, 1>(0, 0);
+    edges[3] = polyhedron.htm.block<3, 1>(0, 0);
     // Edge vector parallel to local Y
-    edges[2] = polyhedron.htm.block<3, 1>(0, 1);   // +Y direction
-    edges[3] = -polyhedron.htm.block<3, 1>(0, 1);  // -Y direction
+    edges[4] = polyhedron.htm.block<3, 1>(0, 1);   // +Y direction
+    edges[5] = polyhedron.htm.block<3, 1>(0, 1);
+    edges[6] = polyhedron.htm.block<3, 1>(0, 1);
+    edges[7] = polyhedron.htm.block<3, 1>(0, 1);
     // Edge vector parallel to local Z
-    edges[4] = polyhedron.htm.block<3, 1>(0, 2);   // +Z direction
-    edges[5] = -polyhedron.htm.block<3, 1>(0, 2);  // -Z direction
+    edges[8] = polyhedron.htm.block<3, 1>(0, 2);   // +Z direction
+    edges[9] = polyhedron.htm.block<3, 1>(0, 2);
+    edges[10] = polyhedron.htm.block<3, 1>(0, 2);
+    edges[11] = polyhedron.htm.block<3, 1>(0, 2);
     return edges;
   } else if (polyhedron.type == 4) {
     // This currently only supports platonic solids
