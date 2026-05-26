@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <ostream>
 
 // This is uaibot header file
 #include "declarations.h"
@@ -574,7 +575,9 @@ float shapingFunction(float u, float k, float epsilon) {
    * defined as: phi(u) = u * (|u|^k) / (|u|^k + epsilon)
    */
   float abs_u_k = pow(abs(u), k);
-  return u * (abs_u_k / (abs_u_k + epsilon));
+  float phi = u * (abs_u_k / (abs_u_k + epsilon));
+  phi = std::isnan(phi) ? 0.0f : phi;
+  return phi;
 }
 std::tuple<float, float> shapingFunctionWithGradient(float u, float k,
                                                      float epsilon) {
@@ -594,6 +597,7 @@ std::tuple<float, float> shapingFunctionWithGradient(float u, float k,
         eps_pow;
   }
   float phi = u * (abs_u_k / (abs_u_k + epsilon));
+  phi = std::isnan(phi) ? 0.0f : phi;
   return make_tuple(phi, dphi_du);
 }
 
@@ -704,9 +708,11 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
     for (size_t j = 0; j < numV; ++j) {
       dotProducts[j] = d.dot(minkowskiVertices[j]);
     }
+    // std::cout << "[DEBUG] inner min at N=" << i << std::endl;
     if (skipGradient) {
       float dist = smoothMinList(dotProducts, gamma);
       float dist_mod = shapingFunction(dist, gamma, epsilon);
+      // std::cout << "min= " << dist << " phi(dist())= " << dist_mod << std::endl;
       innerMins.push_back(dist_mod);
     } else {
       tuple<float, Eigen::VectorXf> res =
