@@ -522,16 +522,23 @@ std::vector<Eigen::Vector3f> getEdgeNormalVectors(
   // polyhedron1 with each edge of polyhedron2
   int numEdges1 = edges1.size();
   int numEdges2 = edges2.size();
-  std::vector<Eigen::Vector3f> crossEdgeNormals(numEdges1 * numEdges2 * 2);
-  int idx = 0;
-  for (int i = 0; i < numEdges1; ++i) {
-    for (int j = 0; j < numEdges2; ++j) {
-      Eigen::Vector3f cross = edges1[i].cross(edges2[j]).normalized();
-      crossEdgeNormals[idx] = cross;
-      crossEdgeNormals[idx + 1] = -cross;
-      idx += 2;
-    }
-  }
+  // TODO: testing Edges only scenario
+  std::vector<Eigen::Vector3f> crossEdgeNormals;
+  crossEdgeNormals.reserve(numEdges1 + numEdges2);  // optional, avoids reallocation
+  crossEdgeNormals.insert(crossEdgeNormals.end(), edges1.begin(), edges1.end());
+  crossEdgeNormals.insert(crossEdgeNormals.end(), edges2.begin(), edges2.end());
+
+  // Uncomment to revert
+  // std::vector<Eigen::Vector3f> crossEdgeNormals(numEdges1 * numEdges2 * 2);
+  // int idx = 0;
+  // for (int i = 0; i < numEdges1; ++i) {
+  //   for (int j = 0; j < numEdges2; ++j) {
+  //     Eigen::Vector3f cross = edges1[i].cross(edges2[j]).normalized();
+  //     crossEdgeNormals[idx] = cross;
+  //     crossEdgeNormals[idx + 1] = -cross;
+  //     idx += 2;
+  //   }
+  // }
   return crossEdgeNormals;
 }
 
