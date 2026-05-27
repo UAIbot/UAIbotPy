@@ -328,4 +328,18 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
       py::arg("polyhedron1"), py::arg("polyhedron2"), py::arg("gamma"),
       py::arg("is_conservative") = true, py::arg("skip_gradient") = false,
       py::arg("epsilon") = 1e-6f);
+  m.def(
+      "holder_distance",
+      [](std::vector<Eigen::Vector3f> verticesA,
+         std::vector<Eigen::Vector3f> verticesB,
+         std::vector<Eigen::Vector3f> normalsA,
+         std::vector<Eigen::Vector3f> normalsB,
+         std::vector<Eigen::Vector3f> edgeNormals, float gamma,
+         bool skipGradient, float epsilon) {
+        return distSet2Set(verticesA, verticesB, normalsA, normalsB,
+                           edgeNormals, gamma, skipGradient, epsilon);
+      },
+      py::arg("vertices1"), py::arg("vertices2"), py::arg("normals1"),
+      py::arg("normals2"), py::arg("edge_normals"), py::arg("gamma"),
+      py::arg("skip_gradient") = false, py::arg("epsilon") = 1e-6f);
 }
