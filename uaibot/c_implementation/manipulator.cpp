@@ -2200,7 +2200,7 @@ DistStructRobotObj Manipulator::signedDistance(GeometricPrimitives obj,
         tuple<std::vector<Eigen::Vector3f>, std::vector<Eigen::Vector3f>,
               std::vector<Eigen::Vector3f>>
             normalsTuple =
-                getCandidateNormals(collisionObj, obj, isConservative);
+                getCandidateNormals(collisionObj, obj, isConservative, 1e-6f);
         std::vector<Eigen::Vector3f> normalsColObj = get<0>(normalsTuple);
         std::vector<Eigen::Vector3f> normalsObj = get<1>(normalsTuple);
         std::vector<Eigen::Vector3f> normalsEdges = get<2>(normalsTuple);
@@ -2536,7 +2536,7 @@ DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
             tuple<std::vector<Eigen::Vector3f>, std::vector<Eigen::Vector3f>,
                   std::vector<Eigen::Vector3f>>
                 normalsTuple =
-                    getCandidateNormals(obj_copy_1, obj_copy_2, isConservative);
+                    getCandidateNormals(obj_copy_1, obj_copy_2, isConservative, 1e-6f);
             std::vector<Eigen::Vector3f> normalsColObj1 = get<0>(normalsTuple);
             std::vector<Eigen::Vector3f> normalsColObj2 = get<1>(normalsTuple);
             std::vector<Eigen::Vector3f> normalsEdges = get<2>(normalsTuple);
@@ -2700,7 +2700,7 @@ DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
               std::vector<Eigen::Vector3f> P1 = getBoxVertices(obj1);
               std::vector<Eigen::Vector3f> P2 = getBoxVertices(obj2);
               auto normalsTuple =
-                  getCandidateNormals(obj1, obj2, isConservative);
+                  getCandidateNormals(obj1, obj2, isConservative, 1e-6f);
               std::vector<Eigen::Vector3f> normalsColObj1 =
                   get<0>(normalsTuple);
               std::vector<Eigen::Vector3f> normalsColObj2 =

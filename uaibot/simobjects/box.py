@@ -517,11 +517,11 @@ class Box:
             pr = obj_cpp.projection(Utils.cvt(point), h, eps)
             return Utils.cvt(pr.proj), pr.dist
 
-    def signed_distance(self, box2: "Box", gamma:float=2., is_conservative: bool = True, skip_gradient: bool = False, epsilon: float = 1e-6, mode: str ='auto') -> float:
+    def signed_distance(self, box2: "Box", gamma:float=2., is_conservative: bool = True, skip_gradient: bool = False, epsilon: float = 1e-6, eps_edge: float = 1e-6, mode: str ='auto') -> float:
         # Currently implemented only in C++. Raise NotImplementedError if mode is 'python' or (mode is 'auto' and c++ is not available)
         if (mode == 'python') or (mode=='auto' and os.environ['CPP_SO_FOUND']=='0'):
             raise NotImplementedError("The method 'signed_distance' is only implemented in c++ mode!")
-        res = ub_cpp.distance_box2box(Utils.obj_to_cpp(self), Utils.obj_to_cpp(box2), gamma, is_conservative, skip_gradient, epsilon)
+        res = ub_cpp.distance_box2box(Utils.obj_to_cpp(self), Utils.obj_to_cpp(box2), gamma, is_conservative, skip_gradient, epsilon, eps_edge)
         return res
 
     def get_candidate_normals(self, box2: "Box", is_conservative: bool = True, mode: str ='auto') -> List[Vector]:

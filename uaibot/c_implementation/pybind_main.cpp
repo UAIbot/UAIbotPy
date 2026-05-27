@@ -171,7 +171,7 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
                       &GeometricPrimitives::create_sphere),
                   py::arg("htm"), py::arg("radius"))
       .def_static("create_pointcloud",
-                  static_cast<GeometricPrimitives (*)(vector<Vector3f>&)>(
+                  static_cast<GeometricPrimitives (*)(vector<Vector3f> &)>(
                       &GeometricPrimitives::create_pointcloud),
                   py::arg("points"))
       .def_static(
@@ -209,7 +209,7 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
       .def(py::init<>())
       .def("fk",
            static_cast<vector<FKResult> (Manipulator::*)(
-               const vector<VectorXf>&, const vector<Matrix4f>&, bool) const>(
+               const vector<VectorXf> &, const vector<Matrix4f> &, bool) const>(
                &Manipulator::fk),
            py::arg("q"), py::arg("htm_world_base"), py::arg("compute_jac"))
       .def("fk",
@@ -288,7 +288,8 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
         py::arg("delta") = c_delta, py::arg("ds") = c_ds);
   m.def("distance_box2box", &distBox2Box, py::arg("box1"), py::arg("box2"),
         py::arg("gamma"), py::arg("is_conservative") = true,
-        py::arg("skip_gradient") = false, py::arg("epsilon") = 1e-6f);
+        py::arg("skip_gradient") = false, py::arg("epsilon") = 1e-6f,
+        py::arg("eps_edge") = 1e-6f);
   // m.def("distance_set2set", &distSet2Set, py::arg("vertices_A"),
   // py::arg("vertices_B"),
   //       py::arg("normals_A"), py::arg("normals_B"), py::arg("edge_normals"),
@@ -296,28 +297,30 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
   // Overloaded functions:
   m.def(
       "get_candidate_normals",
-      [](const GeometricPrimitives& polyhedron1,
-         const GeometricPrimitives& polyhedron2, bool is_conservative) {
-        return getCandidateNormals(polyhedron1, polyhedron2, is_conservative);
+      [](const GeometricPrimitives &polyhedron1,
+         const GeometricPrimitives &polyhedron2, bool is_conservative,
+         float epsEdge) {
+        return getCandidateNormals(polyhedron1, polyhedron2, is_conservative,
+                                   epsEdge);
       },
       py::arg("polyhedron1"), py::arg("polyhedron2"),
-      py::arg("is_conservative") = false);
+      py::arg("is_conservative") = false, py::arg("eps_edge") = 1e-6f);
   m.def(
       "smooth_min",
-      [](const std::vector<float>& values, float r) {
+      [](const std::vector<float> &values, float r) {
         return smoothMinListWithGradient(values, r);
       },
       py::arg("values"), py::arg("r"));
   m.def(
       "smooth_max",
-      [](const std::vector<float>& values, float r) {
+      [](const std::vector<float> &values, float r) {
         return smoothMaxListWithGradient(values, r);
       },
       py::arg("values"), py::arg("r"));
   m.def(
       "distance_set2set",
-      [](const GeometricPrimitives& polyhedron1,
-         const GeometricPrimitives& polyhedron2, float gamma,
+      [](const GeometricPrimitives &polyhedron1,
+         const GeometricPrimitives &polyhedron2, float gamma,
          bool is_conservative, bool skip_gradient, float epsilon) {
         return distSet2Set(polyhedron1, polyhedron2, gamma, is_conservative,
                            skip_gradient, epsilon);
