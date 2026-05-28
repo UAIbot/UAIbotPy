@@ -338,8 +338,8 @@ GeometricPrimitives GeometricPrimitives::create_convexpolytope(Matrix4f htm,
 
   // 2. Enumerate vertices with the known interior point (origin)
   Eigen::Matrix3Xd vPoly;   // will be 3 × M (columns are vertices)
-  Eigen::Vector3d inner(0.0, 0.0, 0.0); // always inside in local frame
-  vertex_enumeration::enumerateVs(hPoly, inner, vPoly);
+  // Eigen::Vector3d inner(0.0, 0.0, 0.0); // always inside in local frame
+  vertex_enumeration::enumerateVs(hPoly, vPoly);
 
   int num_vertices = vPoly.cols();
 
