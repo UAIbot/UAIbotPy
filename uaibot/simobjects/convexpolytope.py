@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 import os
 from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject
 from typing import Optional, Tuple, List
+if os.environ['CPP_SO_FOUND']=="1":
+    import uaibot_cpp_bind as ub_cpp
 
 def is_unbounded(A, b):
     n_dim = A.shape[1]
@@ -138,6 +140,18 @@ class ConvexPolytope:
         return self._b
 
     @property
+    def A_local(self) -> np.matrix:
+        """The A matrix that forms the convex polytope according to 
+        Ap<=b. In local frame
+        """
+        return self._A_local
+
+    @property
+    def b_local(self) -> np.matrix:
+        """The b matrix that forms the convex polytope according to
+        Ap<=b in local frame."""
+        return self._b_local
+    @property
     def vertexes(self) -> List[np.matrix]:
         """All the vertexes of the polygon"""
         return self._vertexes
@@ -248,6 +262,8 @@ class ConvexPolytope:
         
         self._A = np.matrix(A_m)
         self._b = np.matrix(b_m).reshape((n,1))
+        self._A_local = np.array(A)
+        self._b_local = np.array(b).reshape(-1, 1)
         self._htm = htm_m
         self._name = name
         self._frames = []
@@ -658,7 +674,10 @@ class ConvexPolytope:
         # Currently implemented only in C++. Raise NotImplementedError if mode is 'python' or (mode is 'auto' and c++ is not available)
         if (mode == 'python') or (mode=='auto' and os.environ['CPP_SO_FOUND']=='0'):
             raise NotImplementedError("The method 'signed_distance' is only implemented in c++ mode!")
-        res = ub_cpp.distance_set2set(Utils.obj_to_cpp(self), Utils.obj_to_cpp(poly2), gamma, is_conservative, skip_gradient, epsilon, eps_edge)
+        obj1 = ub_cpp.CPP_GeometricPrimitives.create_convexpolytope(self.htm, self.A_local, self.b_local)
+        obj2 = ub_cpp.CPP_GeometricPrimitives.create_convexpolytope(poly2.htm, poly2.A_local, poly2.b_local)
+
+        res = ub_cpp.distance_set2set(obj1, obj2, gamma, is_conservative, skip_gradient, epsilon, eps_edge)
         return res
 
 
