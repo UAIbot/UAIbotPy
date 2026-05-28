@@ -524,8 +524,13 @@ class Box:
         res = ub_cpp.distance_box2box(Utils.obj_to_cpp(self), Utils.obj_to_cpp(box2), gamma, is_conservative, skip_gradient, epsilon, eps_edge)
         return res
 
-    def get_candidate_normals(self, box2: "Box", is_conservative: bool = True, mode: str ='auto') -> List[Vector]:
-        if (mode != 'c++') or (os.environ['CPP_SO_FOUND']=='0'):
+    def get_candidate_normals(self, box2: "Box", is_conservative: bool = True, eps_edge: float = 1e-6, mode: str ='auto') -> List[Vector]:
+        if (mode == 'python') or (mode=='auto' and os.environ['CPP_SO_FOUND']=='0'):
             raise Exception("The method 'get_candidate_normals' is only available in c++ mode!")
         res = ub_cpp.get_candidate_normals(Utils.obj_to_cpp(self), Utils.obj_to_cpp(box2), is_conservative)
         return res
+    def get_vertices(self, mode: str = 'auto') -> List[Vector]:
+        if (mode == 'python') or (mode=='auto' and os.environ['CPP_SO_FOUND']=='0'):
+            raise Exception("The method 'get_vertices' is only available in c++ mode!")
+        return ub_cpp.get_box_vertices(Utils.obj_to_cpp(self))
+

@@ -157,6 +157,11 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
       .def(py::init<>())
       .def_readwrite("htm", &GeometricPrimitives::htm)
       .def_readwrite("points_gp", &GeometricPrimitives::points_gp)
+      .def_readwrite("A", &GeometricPrimitives::A)
+      .def_readwrite("b", &GeometricPrimitives::b)
+      .def_readwrite("A_local", &GeometricPrimitives::A_local)
+      .def_readwrite("b_local", &GeometricPrimitives::b_local)
+      .def_readwrite("vertices_local", &GeometricPrimitives::vertices_local)
       .def_static(
           "create_box",
           static_cast<GeometricPrimitives (*)(Matrix4f, float, float, float)>(
@@ -290,6 +295,7 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
         py::arg("gamma"), py::arg("is_conservative") = true,
         py::arg("skip_gradient") = false, py::arg("epsilon") = 1e-6f,
         py::arg("eps_edge") = 1e-6f);
+  m.def("get_box_vertices", &getBoxVertices, py::arg("box"));
   // m.def("distance_set2set", &distSet2Set, py::arg("vertices_A"),
   // py::arg("vertices_B"),
   //       py::arg("normals_A"), py::arg("normals_B"), py::arg("edge_normals"),
@@ -321,13 +327,13 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
       "distance_set2set",
       [](const GeometricPrimitives &polyhedron1,
          const GeometricPrimitives &polyhedron2, float gamma,
-         bool is_conservative, bool skip_gradient, float epsilon) {
+         bool is_conservative, bool skip_gradient, float epsilon, float epsEdge) {
         return distSet2Set(polyhedron1, polyhedron2, gamma, is_conservative,
-                           skip_gradient, epsilon);
+                           skip_gradient, epsilon, epsEdge);
       },
       py::arg("polyhedron1"), py::arg("polyhedron2"), py::arg("gamma"),
       py::arg("is_conservative") = true, py::arg("skip_gradient") = false,
-      py::arg("epsilon") = 1e-6f);
+      py::arg("epsilon") = 1e-6f, py::arg("eps_edge") = 1e-6f);
   m.def(
       "holder_distance",
       [](std::vector<Eigen::Vector3f> verticesA,
