@@ -2229,6 +2229,7 @@ DistStructRobotObj Manipulator::signedDistance(GeometricPrimitives obj,
         // no_iter_max, p_obj_0);
         float dist = get<0>(res);
         VectorXf grad = get<1>(res);
+        // std::cout << "[DEBUG] Gradient: " << grad.transpose() << std::endl;
         // Each row is a 1 x 3 gradient for every vertex of each object
         MatrixXf gradCollisionObj = get<2>(
             res);  // |P| x 3, where P are the vertices of the collision object

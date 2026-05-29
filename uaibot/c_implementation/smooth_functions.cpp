@@ -615,8 +615,8 @@ std::tuple<float, float> shapingFunctionWithGradient(float u, float k,
   float abs_u_k_plus_2 = pow(abs_u, k + 2);
   float eps_pow = pow(abs_u_k + epsilon, 2);
   float dphi_du = 0.0;
-  if (eps_pow > 1e-6) {
-    float dphi_du =
+  if (eps_pow > 1e-12) {
+    dphi_du =
         (abs_u_k_minus_2 * (abs_u_k_plus_2 + (k + 1) * epsilon * u_squared)) /
         eps_pow;
   }
@@ -703,6 +703,7 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
   // Returns a tuple with (distance, gradient w.r.t minkowski vertices, gradient
   // w.r.t A vertices, gradient w.r.t B vertices, gradient w.r.t normals) the
   // normals are ordered as [faceNormalsA, edgeNormals, faceNormalsB]
+  // std::cout << "[DEBUG] SkipGrad: " << skipGradient << std::endl;
   int numA = verticesA.size();
   int numB = verticesB.size();
   // TODO: remove this when gamma is updated
@@ -747,17 +748,21 @@ distSet2Set(std::vector<Eigen::Vector3f> verticesA,
           smoothMinListWithGradient(dotProducts, gamma);
       float dist = get<0>(res);
       Eigen::VectorXf grad = get<1>(res);
+      // std::cout << "[DEBUG] smooth min grad: " << grad << std::endl;
       tuple<float, float> res_mod =
           shapingFunctionWithGradient(dist, gamma, epsilon);
       float dist_mod = get<0>(res_mod);
       float dphi_du = get<1>(res_mod);
+      if(dphi_du == 0.0){
+        std::cout << "[DEBUG] Dphi_du: " << dphi_du << ", Smin(X)=u= " << dist << ", phi(u)=" << dist_mod << std::endl;
+      }
       innerMins.push_back(dist_mod);
       // Store the gradient in the rows of the jacobian
       dGn_dVc.row(i) = grad.transpose() * dphi_du; // Size 1 x numV
       // if (i == 0) {
-      //   std::cout << "[DEBUG] jacobian row 0 sum: " << jacobian.row(0).sum()
+      //   std::cout << "[DEBUG] dGn_dVc row 0 sum: " << dGn_dVc.row(0).sum()
       //             << std::endl;
-      //   std::cout << "[DEBUG] jacobian row 0: " << jacobian.row(0) <<
+      //   std::cout << "[DEBUG] dGn_dVc row 0: " << dGn_dVc.row(0) <<
       //   std::endl;
       // }
     }
