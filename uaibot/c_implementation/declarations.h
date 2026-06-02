@@ -346,11 +346,11 @@ struct Manipulator {
                                         float eps) const;
   DistStructRobotObj signedDistance(GeometricPrimitives obj, VectorXf q,
                                     Matrix4f htm, float max_dist, float gamma,
-                                    bool isConservative, float epsilon) const;
+                                    bool isConservative, float epsilon, float eps_edge=1e-6f) const;
 
   DistStructRobotAuto signedDistanceAuto(VectorXf q, float max_dist,
                                          float gamma,
-                                         bool isConservative) const;
+                                         bool isConservative, float epsilon, float eps_edge=1e-6f) const;
 };
 
 int mini(int a, int b);

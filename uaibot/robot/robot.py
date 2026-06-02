@@ -1453,20 +1453,20 @@ class Robot:
 
     def signed_distance(self, obj: MetricObject, q: Optional[Vector] = None, htm: Optional[HTMatrix]=None, 
                         max_dist: float = np.inf, gamma: float = 1e-2, is_conservative: bool = True,
-                        epsilon: float = 1e-6, mode: str = 'auto') -> "DistStructRobotObj":
+                        epsilon: float = 1e-6, eps_edge: float=-1, mode: str = 'auto') -> "DistStructRobotObj":
 
         if q is None:
             q = self.q
         if htm is None:
             htm = self.htm
-        dsro = self.cpp_robot.signed_distance(obj.cpp_obj, q, htm, max_dist, gamma, is_conservative, epsilon)
+        dsro = self.cpp_robot.signed_distance(obj.cpp_obj, q, htm, max_dist, gamma, is_conservative, epsilon, eps_edge)
         return _diststructrobotobj_cpp2py(dsro, obj, self)
 
     def signed_distance_auto(self, q: Optional[Vector] = None, max_dist: float = np.inf, gamma: float = 1e-2,
-                             is_conservative: bool = True, epsilon: float = 1e-6, mode: str = 'auto') -> "DistStructRobotAuto":
+                             is_conservative: bool = True, epsilon: float = 1e-6, eps_edge: float=-1, mode: str = 'auto') -> "DistStructRobotAuto":
         if q is None:
             q = self.q
-        dsra = self.cpp_robot.signed_distance_auto(q, max_dist, gamma, is_conservative, epsilon)
+        dsra = self.cpp_robot.signed_distance_auto(q, max_dist, gamma, is_conservative, epsilon, eps_edge)
         return _diststructrobotauto_cpp2py(dsra, self)
 
     def check_free_config(self, q: Optional[Vector]=None, htm: Optional[HTMatrix]=None, 

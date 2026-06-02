@@ -527,34 +527,34 @@ getEdgeNormalVectors(const std::vector<Eigen::Vector3f> &edges1,
   int numEdges1 = edges1.size();
   int numEdges2 = edges2.size();
   // TODO: testing Edges only scenario
-  // std::vector<Eigen::Vector3f> crossEdgeNormals;
-  // crossEdgeNormals.reserve(numEdges1 + numEdges2);  // optional, avoids
-  // reallocation crossEdgeNormals.insert(crossEdgeNormals.end(),
-  // edges1.begin(), edges1.end());
-  // crossEdgeNormals.insert(crossEdgeNormals.end(), edges2.begin(),
-  // edges2.end());
+  std::vector<Eigen::Vector3f> crossEdgeNormals;
+  crossEdgeNormals.reserve(numEdges1 + numEdges2);  // optional, avoids reallocation 
+  crossEdgeNormals.insert(crossEdgeNormals.end(),
+  edges1.begin(), edges1.end());
+  crossEdgeNormals.insert(crossEdgeNormals.end(), edges2.begin(),
+  edges2.end());
 
   // Uncomment to revert
   // std::vector<Eigen::Vector3f> crossEdgeNormals(numEdges1 * numEdges2 * 2);
-  std::vector<Eigen::Vector3f> crossEdgeNormals(numEdges1 * numEdges2 * 2 * 2);
-  // std::cout << "[DEBUG] EDGE EPS RECEIVED:" << eps << std::endl;
-  int idx = 0;
-  for (int i = 0; i < numEdges1; ++i) {
-    for (int j = 0; j < numEdges2; ++j) {
-      // Eigen::Vector3f cross = edges1[i].cross(edges2[j]).normalized();
-      Eigen::VectorXf cross_edge = edges1[i].cross(edges2[j]);
-      Eigen::Vector3f cross_1 = (cross_edge + eps * edges1[i]);
-      cross_1 = cross_1 / pow(cross_1.dot(cross_1) + pow(eps, 2), 0.5);
-      crossEdgeNormals[idx] = cross_1;
-      crossEdgeNormals[idx + 1] = -cross_1;
-      Eigen::Vector3f cross_2 = (cross_edge + eps * edges2[i]);
-      cross_2 = cross_2 / pow(cross_2.dot(cross_2) + pow(eps, 2), 0.5);
-      crossEdgeNormals[idx + 2] = cross_2;
-      crossEdgeNormals[idx + 3] = -cross_2;
-      idx += 4;
-      // idx += 2;
-    }
-  }
+  // std::vector<Eigen::Vector3f> crossEdgeNormals(numEdges1 * numEdges2 * 2 * 2);
+  // // std::cout << "[DEBUG] EDGE EPS RECEIVED:" << eps << std::endl;
+  // int idx = 0;
+  // for (int i = 0; i < numEdges1; ++i) {
+  //   for (int j = 0; j < numEdges2; ++j) {
+  //     // Eigen::Vector3f cross = edges1[i].cross(edges2[j]).normalized();
+  //     Eigen::VectorXf cross_edge = edges1[i].cross(edges2[j]);
+  //     Eigen::Vector3f cross_1 = (cross_edge + eps * edges1[i]);
+  //     cross_1 = cross_1 / pow(cross_1.dot(cross_1) + pow(eps, 2), 0.5);
+  //     crossEdgeNormals[idx] = cross_1;
+  //     crossEdgeNormals[idx + 1] = -cross_1;
+  //     Eigen::Vector3f cross_2 = (cross_edge + eps * edges2[i]);
+  //     cross_2 = cross_2 / pow(cross_2.dot(cross_2) + pow(eps, 2), 0.5);
+  //     crossEdgeNormals[idx + 2] = cross_2;
+  //     crossEdgeNormals[idx + 3] = -cross_2;
+  //     idx += 4;
+  //     // idx += 2;
+  //   }
+  // }
   return crossEdgeNormals;
 }
 

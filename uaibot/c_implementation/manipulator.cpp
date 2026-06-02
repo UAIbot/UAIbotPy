@@ -2167,7 +2167,7 @@ DistStructRobotObj Manipulator::compute_dist(GeometricPrimitives obj,
 DistStructRobotObj Manipulator::signedDistance(GeometricPrimitives obj,
                                                VectorXf q, Matrix4f htm,
                                                float max_dist, float gamma,
-                                               bool isConservative, float epsilon) const {
+                                               bool isConservative, float epsilon, float eps_edge) const {
   FKResult fkres = fk(q, htm, true);
 
   AABB obj_aabb = obj.get_aabb();
@@ -2200,7 +2200,7 @@ DistStructRobotObj Manipulator::signedDistance(GeometricPrimitives obj,
         tuple<std::vector<Eigen::Vector3f>, std::vector<Eigen::Vector3f>,
               std::vector<Eigen::Vector3f>>
             normalsTuple =
-                getCandidateNormals(collisionObj, obj, isConservative, 1e-6f);
+                getCandidateNormals(collisionObj, obj, isConservative, eps_edge);
         std::vector<Eigen::Vector3f> normalsColObj = get<0>(normalsTuple);
         std::vector<Eigen::Vector3f> normalsObj = get<1>(normalsTuple);
         std::vector<Eigen::Vector3f> normalsEdges = get<2>(normalsTuple);
@@ -2482,7 +2482,7 @@ DistStructRobotAuto Manipulator::compute_dist_auto(
 
 DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
                                                     float gamma,
-                                                    bool isConservative) const {
+                                                    bool isConservative, float epsilon, float eps_edge) const {
   FKResult fkres = fk(q, this->htm_world_to_dh0, true);
 
   DistStructRobotAuto dsra;
@@ -2537,7 +2537,7 @@ DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
             tuple<std::vector<Eigen::Vector3f>, std::vector<Eigen::Vector3f>,
                   std::vector<Eigen::Vector3f>>
                 normalsTuple =
-                    getCandidateNormals(obj_copy_1, obj_copy_2, isConservative, 1e-6f);
+                    getCandidateNormals(obj_copy_1, obj_copy_2, isConservative, eps_edge);
             std::vector<Eigen::Vector3f> normalsColObj1 = get<0>(normalsTuple);
             std::vector<Eigen::Vector3f> normalsColObj2 = get<1>(normalsTuple);
             std::vector<Eigen::Vector3f> normalsEdges = get<2>(normalsTuple);
@@ -2560,7 +2560,7 @@ DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
             tuple<float, Eigen::VectorXf, Eigen::MatrixXf, Eigen::MatrixXf,
                   Eigen::MatrixXf>
                 res = distSet2Set(P1, P2, normalsColObj1, normalsColObj2,
-                                  normalsEdges, gamma);
+                                  normalsEdges, gamma, false, epsilon);
             float dist = get<0>(res);
             VectorXf grad = get<1>(res);
             // Each row is a 1 x 3 gradient for every vertex of each object
@@ -2660,88 +2660,88 @@ DistStructRobotAuto Manipulator::signedDistanceAuto(VectorXf q, float max_dist,
   dsra.jac_dist_mat = jac_tot;
   dsra.dist_vect = dist_tot;
 
-  // ========== DEBUG: Numerical Jacobian Check ==========
-  const float eps = 1e-4f;
-  const int n_q = q.rows();
-  const int n_rows = jac_tot.rows();
-
-  // Lambda that recomputes distances (no gradients) for the exact same
-  // collision pairs
-  auto computeDistancesOnly =
-      [&](const Eigen::VectorXf& q_query) -> Eigen::VectorXf {
-    FKResult fk_query =
-        fk(q_query, this->htm_world_to_dh0, false);  // skip Jacobian
-
-    // Precompute Jv_aux for each link (needed? No, not needed for distance
-    // only) Actually we don't need Jacobians for distance, so we can skip
-    // Jv_aux completely.
-
-    Eigen::VectorXf dists(n_rows);
-    int row_idx = 0;
-
-    for (int ind_links_1 = 0; ind_links_1 < no_links; ind_links_1++) {
-      for (int ind_links_2 = ind_links_1 + 2; ind_links_2 < no_links;
-           ind_links_2++) {
-        for (int ind_obj_link_1 = 0;
-             ind_obj_link_1 < geo_prim[ind_links_1].size(); ++ind_obj_link_1) {
-          for (int ind_obj_link_2 = 0;
-               ind_obj_link_2 < geo_prim[ind_links_2].size();
-               ++ind_obj_link_2) {
-            GeometricPrimitives obj1 =
-                geo_prim[ind_links_1][ind_obj_link_1].copy();
-            obj1.htm = fk_query.htm_dh[ind_links_1] *
-                       geo_prim[ind_links_1][ind_obj_link_1].htm;
-
-            GeometricPrimitives obj2 =
-                geo_prim[ind_links_2][ind_obj_link_2].copy();
-            obj2.htm = fk_query.htm_dh[ind_links_2] *
-                       geo_prim[ind_links_2][ind_obj_link_2].htm;
-
-            if (AABB::dist_aabb(obj1.get_aabb(), obj2.get_aabb()) < max_dist) {
-              std::vector<Eigen::Vector3f> P1 = getBoxVertices(obj1);
-              std::vector<Eigen::Vector3f> P2 = getBoxVertices(obj2);
-              auto normalsTuple =
-                  getCandidateNormals(obj1, obj2, isConservative, 1e-6f);
-              std::vector<Eigen::Vector3f> normalsColObj1 =
-                  get<0>(normalsTuple);
-              std::vector<Eigen::Vector3f> normalsColObj2 =
-                  get<1>(normalsTuple);
-              std::vector<Eigen::Vector3f> normalsEdges = get<2>(normalsTuple);
-
-              // Only need the distance, ignore gradients
-              auto res = distSet2Set(P1, P2, normalsColObj1, normalsColObj2,
-                                     normalsEdges, gamma);
-              dists(row_idx) = std::get<0>(res);
-            } else {
-              dists(row_idx) =
-                  max_dist;  // far objects clamped (or any large value)
-            }
-            ++row_idx;
-          }
-        }
-      }
-    }
-    return dists;
-  };
-
-  Eigen::VectorXf d0 = computeDistancesOnly(q);
-  Eigen::MatrixXf num_jac(n_rows, n_q);
-  for (int j = 0; j < n_q; ++j) {
-    Eigen::VectorXf q_plus = q;
-    q_plus(j) += eps;
-    Eigen::VectorXf q_minus = q;
-    q_minus(j) -= eps;
-    Eigen::VectorXf d_plus = computeDistancesOnly(q_plus);
-    Eigen::VectorXf d_minus = computeDistancesOnly(q_minus);
-    num_jac.col(j) = (d_plus - d_minus) / (2.0f * eps);
-  }
-
-  std::cout << "[DEBUG] Analytical Jacobian (jac_tot):\n"
-            << jac_tot << std::endl;
-  std::cout << "[DEBUG] Numerical Jacobian:\n" << num_jac << std::endl;
-  std::cout << "[DEBUG] Difference (Analytical - Numerical):\n"
-            << (jac_tot - num_jac) << std::endl;
-  // ======================================================
+  // // ========== DEBUG: Numerical Jacobian Check ==========
+  // const float eps = 1e-4f;
+  // const int n_q = q.rows();
+  // const int n_rows = jac_tot.rows();
+  //
+  // // Lambda that recomputes distances (no gradients) for the exact same
+  // // collision pairs
+  // auto computeDistancesOnly =
+  //     [&](const Eigen::VectorXf& q_query) -> Eigen::VectorXf {
+  //   FKResult fk_query =
+  //       fk(q_query, this->htm_world_to_dh0, false);  // skip Jacobian
+  //
+  //   // Precompute Jv_aux for each link (needed? No, not needed for distance
+  //   // only) Actually we don't need Jacobians for distance, so we can skip
+  //   // Jv_aux completely.
+  //
+  //   Eigen::VectorXf dists(n_rows);
+  //   int row_idx = 0;
+  //
+  //   for (int ind_links_1 = 0; ind_links_1 < no_links; ind_links_1++) {
+  //     for (int ind_links_2 = ind_links_1 + 2; ind_links_2 < no_links;
+  //          ind_links_2++) {
+  //       for (int ind_obj_link_1 = 0;
+  //            ind_obj_link_1 < geo_prim[ind_links_1].size(); ++ind_obj_link_1) {
+  //         for (int ind_obj_link_2 = 0;
+  //              ind_obj_link_2 < geo_prim[ind_links_2].size();
+  //              ++ind_obj_link_2) {
+  //           GeometricPrimitives obj1 =
+  //               geo_prim[ind_links_1][ind_obj_link_1].copy();
+  //           obj1.htm = fk_query.htm_dh[ind_links_1] *
+  //                      geo_prim[ind_links_1][ind_obj_link_1].htm;
+  //
+  //           GeometricPrimitives obj2 =
+  //               geo_prim[ind_links_2][ind_obj_link_2].copy();
+  //           obj2.htm = fk_query.htm_dh[ind_links_2] *
+  //                      geo_prim[ind_links_2][ind_obj_link_2].htm;
+  //
+  //           if (AABB::dist_aabb(obj1.get_aabb(), obj2.get_aabb()) < max_dist) {
+  //             std::vector<Eigen::Vector3f> P1 = getBoxVertices(obj1);
+  //             std::vector<Eigen::Vector3f> P2 = getBoxVertices(obj2);
+  //             auto normalsTuple =
+  //                 getCandidateNormals(obj1, obj2, isConservative, eps_edge);
+  //             std::vector<Eigen::Vector3f> normalsColObj1 =
+  //                 get<0>(normalsTuple);
+  //             std::vector<Eigen::Vector3f> normalsColObj2 =
+  //                 get<1>(normalsTuple);
+  //             std::vector<Eigen::Vector3f> normalsEdges = get<2>(normalsTuple);
+  //
+  //             // Only need the distance, ignore gradients
+  //             auto res = distSet2Set(P1, P2, normalsColObj1, normalsColObj2,
+  //                                    normalsEdges, gamma, false, epsilon);
+  //             dists(row_idx) = std::get<0>(res);
+  //           } else {
+  //             dists(row_idx) =
+  //                 max_dist;  // far objects clamped (or any large value)
+  //           }
+  //           ++row_idx;
+  //         }
+  //       }
+  //     }
+  //   }
+  //   return dists;
+  // };
+  //
+  // Eigen::VectorXf d0 = computeDistancesOnly(q);
+  // Eigen::MatrixXf num_jac(n_rows, n_q);
+  // for (int j = 0; j < n_q; ++j) {
+  //   Eigen::VectorXf q_plus = q;
+  //   q_plus(j) += eps;
+  //   Eigen::VectorXf q_minus = q;
+  //   q_minus(j) -= eps;
+  //   Eigen::VectorXf d_plus = computeDistancesOnly(q_plus);
+  //   Eigen::VectorXf d_minus = computeDistancesOnly(q_minus);
+  //   num_jac.col(j) = (d_plus - d_minus) / (2.0f * eps);
+  // }
+  //
+  // std::cout << "[DEBUG] Analytical Jacobian (jac_tot):\n"
+  //           << jac_tot << std::endl;
+  // std::cout << "[DEBUG] Numerical Jacobian:\n" << num_jac << std::endl;
+  // std::cout << "[DEBUG] Difference (Analytical - Numerical):\n"
+  //           << (jac_tot - num_jac) << std::endl;
+  // // ======================================================
   return dsra;
 }
 // -----------------------------------------------------------------------------

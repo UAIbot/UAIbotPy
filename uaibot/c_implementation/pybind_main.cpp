@@ -276,10 +276,10 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
       .def("__repr__", &Manipulator::toString)
       .def("signed_distance", &Manipulator::signedDistance, py::arg("obj"),
            py::arg("q"), py::arg("htm"), py::arg("max_dist"), py::arg("gamma"),
-           py::arg("is_conservative") = true, py::arg("epsilon") = 1e-6f)
+           py::arg("is_conservative") = true, py::arg("epsilon") = 1e-6f, py::arg("eps_edge") = -1)
       .def("signed_distance_auto", &Manipulator::signedDistanceAuto,
            py::arg("q"), py::arg("max_dist"), py::arg("gamma"),
-           py::arg("is_conservative") = true);
+           py::arg("is_conservative") = true, py::arg("epsilon")=1e-6f, py::arg("eps_edge")=-1);
 
   m.def("vectorfield_rn", &vectorfield_rn, py::arg("q"), py::arg("q_path"),
         py::arg("alpha"), py::arg("const_velocity"), py::arg("is_closed"),
