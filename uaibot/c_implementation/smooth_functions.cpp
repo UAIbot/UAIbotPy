@@ -528,11 +528,14 @@ getEdgeNormalVectors(const std::vector<Eigen::Vector3f> &edges1,
   int numEdges2 = edges2.size();
   // TODO: testing Edges only scenario
   std::vector<Eigen::Vector3f> crossEdgeNormals;
-  crossEdgeNormals.reserve(numEdges1 + numEdges2);  // optional, avoids reallocation 
+  // Adds +edges and -edges instead of cross-product (more conservative, but continuous)
+  crossEdgeNormals.reserve(2 * (numEdges1 + numEdges2));  // optional, avoids reallocation 
   crossEdgeNormals.insert(crossEdgeNormals.end(),
   edges1.begin(), edges1.end());
   crossEdgeNormals.insert(crossEdgeNormals.end(), edges2.begin(),
   edges2.end());
+  for (const auto& e : edges1) crossEdgeNormals.push_back(-e);
+  for (const auto& e : edges2) crossEdgeNormals.push_back(-e);
 
   // Uncomment to revert
   // std::vector<Eigen::Vector3f> crossEdgeNormals(numEdges1 * numEdges2 * 2);
