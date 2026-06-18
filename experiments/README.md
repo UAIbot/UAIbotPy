@@ -16,6 +16,7 @@ On **Ubuntu**  systems, install the essential build tools, CMake, and the Python
 ```bash
 sudo apt update
 sudo apt install build-essential cmake python3-dev
+```
 
 ---
 
