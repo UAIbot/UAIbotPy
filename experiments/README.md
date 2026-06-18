@@ -11,6 +11,12 @@ This repository contains the code for the paper experiments using a CBF based co
 - **CMake** (required for building the pybind11 bindings).
 - A C++ compiler (e.g., GCC, Clang, or MSVC) to compile the extensions.
 
+On **Ubuntu**  systems, install the essential build tools, CMake, and the Python development headers:
+
+```bash
+sudo apt update
+sudo apt install build-essential cmake python3-dev
+
 ---
 
 ## 1. Clone the Repository (Specific Branch)
@@ -55,7 +61,7 @@ pip install .
 The experiment script requires `matplotlib` for plotting. Install it manually:
 
 ```bash
-pip install matplotlib
+pip install PyQt5
 ```
 
 (Other dependencies are automatically installed via `pip install .`.)
