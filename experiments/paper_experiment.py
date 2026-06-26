@@ -27,7 +27,7 @@ if mode == 0:
     h = 1e-6
     eps = 0
     delta_obs = 0.03
-    delta_auto = 0.01
+    delta_auto = 1e-4
 else:
     gamma = 2
     epsilon = 9e-4
@@ -155,6 +155,9 @@ for i, link in enumerate(robot.links):
 
 frame_tg = ub.Frame(htm=htm_tg)
 sim.add(frame_tg)
+
+if mode == 0:
+    obstacles = real_obstacles
 
 # Auxiliary functions
 
