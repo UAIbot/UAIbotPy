@@ -240,6 +240,7 @@ struct GeometricPrimitives {
   MatrixXf A_local;
   VectorXf b_local;
   std::vector<Eigen::Vector3f> vertices_local;
+  std::vector<Eigen::Vector3f> edges_local;
 
   // For point cloud and convex polytopes
   vector<Vector3f> points_gp;

@@ -353,6 +353,47 @@ GeometricPrimitives GeometricPrimitives::create_convexpolytope(Matrix4f htm,
 
   gp.vertices_local = local_vertices;
 
+  // 4. Extract true edges from the halfspace/vertex data.
+  //    A true edge is a segment between two vertices that lies in at
+  //    least two face planes. Triangulation diagonals share only one plane.
+  std::vector<Eigen::Vector3f> local_edges;
+  const double edge_tol = 1e-8;   // plane-on tolerance, relative to unit normals
+
+  for (int i = 0; i < num_vertices; ++i) {
+      const Eigen::Vector3d vi = vPoly.col(i);
+
+      for (int j = i + 1; j < num_vertices; ++j) {
+          const Eigen::Vector3d vj = vPoly.col(j);
+
+          int common_faces = 0;
+
+          for (int f = 0; f < num_faces; ++f) {
+              const Eigen::Vector3d n = gp.A_local.row(f).cast<double>();
+              const double d = static_cast<double>(gp.b_local(f));
+
+              const bool vi_on_plane = std::abs(n.dot(vi) - d) <= edge_tol;
+              const bool vj_on_plane = std::abs(n.dot(vj) - d) <= edge_tol;
+
+              if (vi_on_plane && vj_on_plane) {
+                  ++common_faces;
+              }
+          }
+
+          // A geometric edge is incident to at least two faces.
+          if (common_faces >= 2) {
+              Eigen::Vector3d dir = vj - vi;
+              const double norm = dir.norm();
+
+              if (norm > edge_tol) {
+                  dir /= norm;
+                  local_edges.emplace_back(dir.cast<float>());
+              }
+          }
+      }
+  }
+
+  gp.edges_local = local_edges;
+
   float x_min = VERYBIGNUMBER;
   float x_max = -VERYBIGNUMBER;
   float y_min = VERYBIGNUMBER;

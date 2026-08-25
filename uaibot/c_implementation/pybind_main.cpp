@@ -162,6 +162,7 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
       .def_readwrite("A_local", &GeometricPrimitives::A_local)
       .def_readwrite("b_local", &GeometricPrimitives::b_local)
       .def_readwrite("vertices_local", &GeometricPrimitives::vertices_local)
+      .def_readwrite("edges_local", &GeometricPrimitives::edges_local)
       .def_static(
           "create_box",
           static_cast<GeometricPrimitives (*)(Matrix4f, float, float, float)>(
