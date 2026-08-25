@@ -21,6 +21,7 @@ import os
 import inspect
 import webbrowser
 import random
+import tempfile
 
 class Simulation:
     """
@@ -1171,3 +1172,36 @@ class Simulation:
                 self.add(obj_sim._eef_frame)
             if Utils.get_uaibot_type(obj_sim) == 'uaibot.Group':
                 self.scan_group(obj_sim)
+
+    def run_in_browser(self) -> None:
+        """Run simulation in browser."""
+
+        if Utils.get_environment()=='Local':
+            
+            if self.local_host_port=='':
+                rand_suffix = random.randint(10**10, 10**12)
+                file_name = f"sim_{rand_suffix}"
+
+                frame = inspect.stack()[1] 
+                caller_filepath = frame.filename
+                current_folder = os.path.dirname(os.path.abspath(caller_filepath))
+                self.save(current_folder, file_name)
+
+                abs_path = Path(current_folder+"/"+file_name+".html").resolve()
+                file_url = abs_path.as_uri()
+                webbrowser.open(file_url, new=1)
+            else:
+                print("'run' functionality does not work in localhost. Please \
+                      ensure that the html file is saved inside your localhost folder \
+                      and open it in your browser through the localhost address. ")
+
+        else:
+            tmp_dir = tempfile.gettempdir()
+            file_name = "uaibot_simulation"
+            file_path = os.path.join(tmp_dir, file_name + ".html")
+            path = Path(file_path).expanduser().resolve()
+            self.save(tmp_dir, file_name)
+            # Convert to file:// URL and open
+            webbrowser.open_new_tab(path.as_uri())
+
+
