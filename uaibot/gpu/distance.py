@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from uaibot.gpu.pairwise import (
     pairwise_difference,
     pairwise_direction_vertex_dot,
@@ -11,6 +12,115 @@ from uaibot.gpu.functional import (
 )
 from collections import defaultdict
 from uaibot.gpu.geometry import extract_VEF
+
+# -------------------------------------------------------------------- #
+#                            DISTANCE ONLY
+# -------------------------------------------------------------------- #
+
+
+def _aggregate_holder_distance(values, gamma, eps=1e-3):
+    r"""Aggregate distances using Hölder min/max operations.
+
+    This function applies the final aggregation steps of the Hölder
+    distance: it applies the Hölder min/max over aggregated values.
+
+    Parameters
+    ----------
+    values : torch.Tensor
+        Distances of shape ``(N_A, N_B, D, V)``, where ``D`` is
+        the number of directions (edges and normals) and ``V`` is the number
+        of vertex differences.
+    gamma : float
+        Positive parameter controlling the sharpness and differentiability
+        of the aggregation.
+    eps : float, optional
+        Small positive value used for numerical smoothing. Default is 1e-3.
+
+    Returns
+    -------
+    torch.Tensor
+        Aggregated distance of shape ``(N_A, N_B)``.
+    """
+    # Group vertices
+    x1 = holder_min(values, gamma, dim=3, eps=eps)  # (O1, O2, N)
+
+    # Group normals
+    x2 = holder_max(
+        shaping_function(x1, gamma, eps=eps), gamma, dim=2, eps=eps
+    )  # (O1, O2)
+
+    return shaping_function(x2, gamma, eps=eps)
+
+
+def holder_distance(
+    vertexA: torch.Tensor,
+    edgesA: torch.Tensor,
+    facenormalsA: torch.Tensor,
+    vertexB: torch.Tensor,
+    edgesB: torch.Tensor,
+    facenormalsB: torch.Tensor,
+    gamma: float,
+    eps: float = 1e-3,
+) -> torch.Tensor:
+    r"""Compute the Hölder distance between two batches of convex
+    polyhedra.
+
+    The Hölder distance is a differentiable signed distance between
+    convex polyhedra. This function computes the distance between every
+    pair of objects from batch ``A`` and batch ``B``.
+
+    Parameters
+    ----------
+    vertexA : torch.Tensor
+        Vertices of objects in batch A, shape ``(N_A, V_A, 3)``.
+    edgesA : torch.Tensor
+        Edge direction vectors of objects in batch A, shape ``(N_A, E_A, 3)``.
+    facenormalsA : torch.Tensor
+        Face normal vectors of objects in batch A, shape ``(N_A, F_A, 3)``.
+    vertexB : torch.Tensor
+        Vertices of objects in batch B, shape ``(N_B, V_B, 3)``.
+    edgesB : torch.Tensor
+        Edge direction vectors of objects in batch B, shape ``(N_B, E_B, 3)``.
+    facenormalsB : torch.Tensor
+        Face normal vectors of objects in batch B, shape ``(N_B, F_B, 3)``.
+    gamma : float
+        Positive parameter controlling the differentiability order and the
+        sharpness of the Hölder min/max approximation. For integer values,
+        the distance is ``gamma``-times differentiable with respect to the
+        object geometry.
+    eps : float, optional
+        Small positive value used by the shaping function and the Hölder
+        min/max aggregations to avoid numerical issues. Smaller values
+        approximate the true distance more closely but can increase
+        gradient magnitudes. Default is 1e-3.
+
+    Returns
+    -------
+    torch.Tensor
+        Signed distance between each pair of objects from A and B, with
+        shape ``(N_A, N_B)``.
+
+    Notes
+    -----
+    All input tensors must be on the same device and have a floating-point
+    dtype. The objects in each batch need to have the same number of
+    vertices, edges, or normals.
+
+    For the mathematical definition, see Definition 3.2 in
+    https://arxiv.org/abs/2608.07707.
+    """
+    edges_AB = pairwise_concat_objects(edgesA, edgesB)
+    edges_AB = torch.cat([edges_AB, -edges_AB], dim=2)
+    facenormals_AB = pairwise_concat_objects(facenormalsA, facenormalsB)
+    vertices_AB = pairwise_difference(vertexA, vertexB)
+
+    normals_AB = torch.cat([edges_AB, facenormals_AB], dim=2)
+
+    pnv = pairwise_direction_vertex_dot(normals_AB, vertices_AB)
+
+    dist = _aggregate_holder_distance(pnv, gamma, eps=eps)
+
+    return dist
 
 
 def holder_distance_objects(
@@ -86,106 +196,375 @@ def holder_distance_objects(
     return dist
 
 
-def _aggregate_holder_distance(values, gamma, eps=1e-3):
-    r"""Aggregate distances using Hölder min/max operations.
-
-    This function applies the final aggregation steps of the Hölder
-    distance: it applies the Hölder min/max over aggregated values.
-
-    Parameters
-    ----------
-    values : torch.Tensor
-        Distances of shape ``(N_A, N_B, D, V)``, where ``D`` is
-        the number of directions (edges and normals) and ``V`` is the number
-        of vertex differences.
-    gamma : float
-        Positive parameter controlling the sharpness and differentiability
-        of the aggregation.
-    eps : float, optional
-        Small positive value used for numerical smoothing. Default is 1e-3.
-
-    Returns
-    -------
-    torch.Tensor
-        Aggregated distance of shape ``(N_A, N_B)``.
-    """
-    # Group vertices
-    x1 = holder_min(values, gamma, dim=3, eps=eps)  # (O1, O2, N)
-
-    # Group normals
-    x2 = holder_max(
-        shaping_function(x1, gamma, eps=eps), gamma, dim=2, eps=eps
-    )  # (O1, O2)
-
-    return shaping_function(x2, gamma, eps=eps)
+# -------------------------------------------------------------------- #
+#                            GRADIENT
+# -------------------------------------------------------------------- #
 
 
-def holder_distance(
+def holder_distance_with_grad(
     vertexA: torch.Tensor,
     edgesA: torch.Tensor,
-    normalsA: torch.Tensor,
+    facenormalsA: torch.Tensor,
     vertexB: torch.Tensor,
     edgesB: torch.Tensor,
-    normalsB: torch.Tensor,
+    facenormalsB: torch.Tensor,
     gamma: float,
-    eps: float = 1e-3,
-) -> torch.Tensor:
-    r"""Compute the Hölder distance between two batches of convex
-    polyhedra.
-
-    The Hölder distance is a differentiable signed distance between
-    convex polyhedra. This function computes the distance between every
-    pair of objects from batch ``A`` and batch ``B``.
+    eps: float,
+):
+    """
+    Compute the Hölder distance between two batches of convex polyhedra,
+    and the gradient of the sum of all distances with respect to the
+    intermediate projected values (pnv).
 
     Parameters
     ----------
-    vertexA : torch.Tensor
-        Vertices of objects in batch A, shape ``(N_A, V_A, 3)``.
-    edgesA : torch.Tensor
-        Edge direction vectors of objects in batch A, shape ``(N_A, E_A, 3)``.
-    normalsA : torch.Tensor
-        Face normal vectors of objects in batch A, shape ``(N_A, F_A, 3)``.
-    vertexB : torch.Tensor
-        Vertices of objects in batch B, shape ``(N_B, V_B, 3)``.
-    edgesB : torch.Tensor
-        Edge direction vectors of objects in batch B, shape ``(N_B, E_B, 3)``.
-    normalsB : torch.Tensor
-        Face normal vectors of objects in batch B, shape ``(N_B, F_B, 3)``.
+    vertexA, edgesA, facenormalsA, vertexB, edgesB,
+    facenormalsB : torch.Tensor
+        Batched geometry tensors, shapes as in `holder_distance`.
     gamma : float
-        Positive parameter controlling the differentiability order and the
-        sharpness of the Hölder min/max approximation. For integer values,
-        the distance is ``gamma``-times differentiable with respect to the
-        object geometry.
-    eps : float, optional
-        Small positive value used by the shaping function and the Hölder
-        min/max aggregations to avoid numerical issues. Smaller values
-        approximate the true distance more closely but can increase
-        gradient magnitudes. Default is 1e-3.
+        Hölder parameter.
+    eps : float
+        Numerical smoothing.
 
     Returns
     -------
-    torch.Tensor
-        Signed distance between each pair of objects from A and B, with
-        shape ``(N_A, N_B)``.
-
-    Notes
-    -----
-    All input tensors must be on the same device and have a floating-point
-    dtype. The objects in each batch need to have the same number of
-    vertices, edges, or normals.
-
-    For the mathematical definition, see Definition 3.2 in
-    https://arxiv.org/abs/2608.07707.
+    dist : torch.Tensor
+        Distance matrix of shape ``(N_A, N_B)``.
+    grad_pnv : torch.Tensor
+        Gradient of ``dist.sum()`` with respect to the projected dot
+        products ``pnv``. Shape: ``(N_A, N_B, D, V)``, where
+        ``D = E_A + E_B + F_A + F_B`` (after concatenation and duplication)
+        and ``V = V_A * V_B``.
     """
-    edges_AB = pairwise_concat_objects(edgesA, edgesB)
-    edges_AB = torch.cat([edges_AB, -edges_AB], dim=2)
-    normals_AB = pairwise_concat_objects(normalsA, normalsB)
-    vertices_AB = pairwise_difference(vertexA, vertexB)
+    # Convert to double for numerical stability
+    vertexA = vertexA.double()
+    edgesA = edgesA.double()
+    facenormalsA = facenormalsA.double()
+    vertexB = vertexB.double()
+    edgesB = edgesB.double()
+    facenormalsB = facenormalsB.double()
+    # Forward projection without tracking gradients
+    with torch.no_grad():
+        edges_AB = pairwise_concat_objects(edgesA, edgesB)
+        edges_AB = torch.cat([edges_AB, -edges_AB], dim=2)
+        facenormals_AB = pairwise_concat_objects(facenormalsA, facenormalsB)
+        vertices_AB = pairwise_difference(vertexA, vertexB)
+        normals_AB = torch.cat([edges_AB, facenormals_AB], dim=2)
+        pnv = pairwise_direction_vertex_dot(normals_AB, vertices_AB)
 
-    direction_AB = torch.cat([edges_AB, normals_AB], dim=2)
+    # Detach and create a leaf tensor for gradient computation
+    pnv_leaf = pnv.detach().requires_grad_(True)
 
-    pnv = pairwise_direction_vertex_dot(direction_AB, vertices_AB)
+    # Compute distances
+    dist = _aggregate_holder_distance(pnv_leaf, gamma, eps)
 
-    dist = _aggregate_holder_distance(pnv, gamma, eps=eps)
+    # Backward on the sum of distances
+    loss = dist.sum()
+    loss.backward()
+    # Optionally convert back
+    dist = dist.float()
+    grad = pnv_leaf.grad.float()
+    grad = torch.nan_to_num(grad, nan=0.0)  # replace NaN with 0
+    # Return detached distances and the gradient
+    return dist, grad
 
-    return dist
+
+def se3_generators():
+    """Return the six 4x4 SE(3) Lie algebra generators (shape: 6,4,4)."""
+    S = torch.zeros(6, 4, 4)
+    # Rotation generators (skew-symmetric)
+    # x-axis rotation
+    S[0, 0, 1] = -1.0
+    S[0, 1, 0] = 1.0
+    # y-axis rotation
+    S[1, 0, 2] = 1.0
+    S[1, 2, 0] = -1.0
+    # z-axis rotation
+    S[2, 1, 2] = -1.0
+    S[2, 2, 1] = 1.0
+    # Translation generators
+    S[3, 0, 3] = 1.0  # x translation
+    S[4, 1, 3] = 1.0  # y translation
+    S[5, 2, 3] = 1.0  # z translation
+    return S
+
+
+def pnv_grad_SE3(normals_A, vertices_A, normals_B, vertices_B, S=None):
+    """
+    Compute the L-operator gradients of pnv = n^T (a - b) with respect to
+    SE(3) poses, for all combinations of normals from A/B and vertices
+    from A/B.
+
+    The function assumes that under a pose H, vertices and normals transform
+    as H * v (homogeneous, last=1) and H * n (last=0), respectively.
+    Both A and B are subject to independent poses H_A and H_B.
+
+    Parameters
+    ----------
+    normals_A : torch.Tensor, shape (N_A, 3)
+        Unit normals (face + edges) of object A in world frame.
+    vertices_A : torch.Tensor, shape (V_A, 3)
+        Vertices of object A in world frame.
+    normals_B : torch.Tensor, shape (N_B, 3)
+        Unit normals (face + edges) of object B.
+    vertices_B : torch.Tensor, shape (V_B, 3)
+        Vertices of object B.
+    S : torch.Tensor, shape (6,4,4), optional
+        SE(3) Lie algebra generators. If None, uses the default basis.
+
+    Returns
+    -------
+    dict of torch.Tensor:
+        'nA_grad_HA': shape (N_A, V_A, V_B, 6)
+            Gradient of pnv w.r.t. pose A for normals from A.
+        'nA_grad_HB': shape (N_A, V_A, V_B, 6)
+            Gradient of pnv w.r.t. pose B for normals from A.
+        'nB_grad_HA': shape (N_B, V_A, V_B, 6)
+            Gradient of pnv w.r.t. pose A for normals from B.
+        'nB_grad_HB': shape (N_B, V_A, V_B, 6)
+            Gradient of pnv w.r.t. pose B for normals from B.
+    """
+    if S is None:
+        S = se3_generators().to(normals_A.device)
+
+    # Convert to homogeneous coordinates
+    nA_h = torch.cat(
+        [normals_A, torch.zeros_like(normals_A[..., :1])], dim=-1
+    )  # (F_A,4)
+    nB_h = torch.cat(
+        [normals_B, torch.zeros_like(normals_B[..., :1])], dim=-1
+    )  # (F_B,4)
+    vA_h = torch.cat(
+        [vertices_A, torch.ones_like(vertices_A[..., :1])], dim=-1
+    )  # (V_A,4)
+    vB_h = torch.cat(
+        [vertices_B, torch.ones_like(vertices_B[..., :1])], dim=-1
+    )  # (V_B,4)
+
+    # Compute fundamental products using einsum
+    # n^T S_i v (i: basis index, f: normal index, v: vertex index)
+    prod_nA_S_vA = torch.einsum("fi,iv,vj->fv", nA_h, S, vA_h)  # (F_A, V_A, 6)
+    prod_nA_St_vB = torch.einsum(
+        "fi,iv,vj->fv", nA_h, S.transpose(-1, -2), vB_h
+    )  # (F_A, V_B, 6)
+    prod_nB_S_vA = torch.einsum("fi,iv,vj->fv", nB_h, S, vA_h)  # (F_B, V_A, 6)
+    # prod_nB_St_vB = torch.einsum(
+    #     "fi,iv,vj->fv", nB_h, S.transpose(-1, -2), vB_h
+    # )  # (F_B, V_B, 6)
+    prod_nB_S_vB = torch.einsum("fi,iv,vj->fv", nB_h, S, vB_h)  # (F_B, V_B, 6)
+    prod_nB_St_vA = torch.einsum(
+        "fi,iv,vj->fv", nB_h, S.transpose(-1, -2), vA_h
+    )  # (F_B, V_A, 6)
+
+    # Expand dimensions to combine over (V_A, V_B)
+    # For n from A:
+    #   grad_HA = 2 * nA^T S a_A - nA^T S^T b_B
+    grad_HA_nA = (
+        2.0 * prod_nA_S_vA[:, :, None, :] - prod_nA_St_vB[:, None, :, :]
+    )  # (F_A, V_A, V_B, 6)
+    #   grad_HB = - nA^T S b_B
+    grad_HB_nA = -prod_nA_St_vB[:, None, :, :]
+
+    # For n from B:
+    #   grad_HA = nB^T S a_A
+    grad_HA_nB = prod_nB_S_vA[:, :, None, :]  # (F_B, V_A, V_B, 6)
+    #   grad_HB = nB^T S^T a_A - nB^T S^T b_B - nB^T S b_B
+    grad_HB_nB = (
+        prod_nB_St_vA[:, :, None, :]
+        # - prod_nB_St_vB[:, None, :, :]
+        - 2.0 * prod_nB_S_vB[:, None, :, :]
+    )
+
+    return {
+        "nA_grad_HA": grad_HA_nA,
+        "nA_grad_HB": grad_HB_nA,
+        "nB_grad_HA": grad_HA_nB,
+        "nB_grad_HB": grad_HB_nB,
+    }
+
+
+def holder_distance_objects_with_grad(
+    objects_a,
+    objects_b=None,
+    gamma=2.0,
+    eps=1e-3,
+    device=None,
+):
+    """
+    Compute the Hölder distance between two heterogeneous sets of objects,
+    and the gradient of the sum of distances with respect to the left‑perturbation
+    of each object's SE(3) pose.
+
+    Returns
+    -------
+    dist : torch.Tensor, shape (N_A, N_B)
+        Distance matrix.
+    grad_dict : dict of torch.Tensor:
+        'grad_HA': shape (N_A, 6)
+            Gradient of holder distance w.r.t. pose A for objects from A.
+        'grad_HB': shape (N_B, 6)
+            Gradient of holder distance w.r.t. pose B for objects from B.
+    """
+    if objects_b is None:
+        objects_b = objects_a
+
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Extract components (vertices, edges, face normals)
+    comp_a = [extract_VEF(obj) for obj in objects_a]
+    comp_b = [extract_VEF(obj) for obj in objects_b]
+
+    # Group by signature
+    def group_indices(components):
+        groups = defaultdict(list)
+        for i, (v, e, n) in enumerate(components):
+            sig = (v.shape[0], e.shape[0], n.shape[0])
+            groups[sig].append(i)
+        return groups
+
+    groups_a = group_indices(comp_a)
+    groups_b = group_indices(comp_b)
+
+    N_A = len(objects_a)
+    N_B = len(objects_b)
+    dist = torch.empty((N_A, N_B), dtype=torch.float32, device=device)
+    grad_HA = torch.zeros(N_A, 6, dtype=torch.float32, device=device)
+    grad_HB = torch.zeros(N_B, 6, dtype=torch.float32, device=device)
+
+    for sig_a, idx_a in groups_a.items():
+        # Stack geometry for the whole group
+        vA = torch.stack([comp_a[i][0] for i in idx_a]).to(device)  # (nA, V_A, 3)
+        eA = torch.stack([comp_a[i][1] for i in idx_a]).to(device)  # (nA, E_A, 3)
+        nA = torch.stack([comp_a[i][2] for i in idx_a]).to(device)  # (nA, F_A, 3)
+
+        for sig_b, idx_b in groups_b.items():
+            vB = torch.stack([comp_b[i][0] for i in idx_b]).to(device)
+            eB = torch.stack([comp_b[i][1] for i in idx_b]).to(device)
+            nB = torch.stack([comp_b[i][2] for i in idx_b]).to(device)
+
+            # Compute block distances and pnv gradient (w.r.t. pnv)
+            block_dist, block_grad = holder_distance_with_grad(
+                vA, eA, nA, vB, eB, nB, gamma, eps
+            )  # block_dist: (len(idx_a), len(idx_b)), block_grad: (len(idx_a), len(idx_b), D, V)
+
+            # Dimensions
+            nA_local, V_A, _ = vA.shape
+            nB_local, V_B, _ = vB.shape
+            E_A = eA.shape[1]
+            E_B = eB.shape[1]
+            F_A = nA.shape[1]
+            F_B = nB.shape[1]
+            D = block_grad.shape[2]  # = 2*E_A + 2*E_B + F_A + F_B
+            V = block_grad.shape[3]  # should equal V_A * V_B
+
+            # Fill distance block
+            dist[np.ix_(idx_a, idx_b)] = block_dist.detach()
+
+            # Loop over each pair in the block to compute pose gradients
+            for i_local, i_global in enumerate(idx_a):
+                for j_local, j_global in enumerate(idx_b):
+                    # Extract geometry for this pair
+                    vertices_i = vA[i_local]  # (V_A, 3)
+                    edges_i = eA[i_local]  # (E_A, 3)
+                    normals_i = nA[i_local]  # (F_A, 3)
+
+                    vertices_j = vB[j_local]  # (V_B, 3)
+                    edges_j = eB[j_local]  # (E_B, 3)
+                    normals_j = nB[j_local]  # (F_B, 3)
+
+                    # Directions from A and B (positive edges + normals)
+                    dirs_A = torch.cat([edges_i, normals_i], dim=0)  # (E_A + F_A, 3)
+                    dirs_B = torch.cat([edges_j, normals_j], dim=0)  # (E_B + F_B, 3)
+
+                    # Compute L-operator gradients for this pair
+                    pnv_grads = pnv_grad_SE3(
+                        normals_A=dirs_A,
+                        vertices_A=vertices_i,
+                        normals_B=dirs_B,
+                        vertices_B=vertices_j,
+                    )
+
+                    # Gradients for positive directions (shape: (num_dirs, V_A, V_B, 6))
+                    pos_nA_grad_HA = pnv_grads["nA_grad_HA"]  # (E_A+F_A, V_A, V_B, 6)
+                    pos_nA_grad_HB = pnv_grads["nA_grad_HB"]
+                    pos_nB_grad_HA = pnv_grads["nB_grad_HA"]  # (E_B+F_B, V_A, V_B, 6)
+                    pos_nB_grad_HB = pnv_grads["nB_grad_HB"]
+
+                    # Build full gradient tensors for this pair w.r.t. H_A and H_B
+                    pair_grad_HA = torch.zeros(D, V_A, V_B, 6, device=device)
+                    pair_grad_HB = torch.zeros(D, V_A, V_B, 6, device=device)
+
+                    # Helper to assign slices
+                    def assign(slice_idx, grad_tensor, source, negate=False):
+                        if negate:
+                            pair_grad_HA[slice_idx] = -source
+                            pair_grad_HB[slice_idx] = -source
+                        else:
+                            pair_grad_HA[slice_idx] = source[
+                                ..., :6
+                            ]  # source already (...,6)
+                            pair_grad_HB[slice_idx] = source[..., :6]
+
+                    # Positive edges of A (first E_A entries in dirs_A)
+                    assign(slice(0, E_A), pos_nA_grad_HA[:E_A])
+                    # Positive edges of B (first E_B entries in dirs_B)
+                    assign(slice(E_A, E_A + E_B), pos_nB_grad_HA[:E_B])
+                    # Negative edges of A (negation of positive edges of A)
+                    assign(
+                        slice(E_A + E_B, 2 * E_A + E_B),
+                        pos_nA_grad_HA[:E_A],
+                        negate=True,
+                    )
+                    # Negative edges of B
+                    assign(
+                        slice(2 * E_A + E_B, 2 * E_A + 2 * E_B),
+                        pos_nB_grad_HA[:E_B],
+                        negate=True,
+                    )
+                    # Normals of A (last F_A entries)
+                    assign(
+                        slice(2 * E_A + 2 * E_B, 2 * E_A + 2 * E_B + F_A),
+                        pos_nA_grad_HA[E_A:],
+                    )
+                    # Normals of B
+                    assign(slice(2 * E_A + 2 * E_B + F_A, D), pos_nB_grad_HA[E_B:])
+
+                    # But careful: for pair_grad_HB we need the corresponding HB gradients.
+                    # We'll rebuild using the same structure but with HB sources.
+                    pair_grad_HB = torch.zeros_like(pair_grad_HA)
+                    # Re‑assign with HB sources
+                    assign(slice(0, E_A), pos_nA_grad_HB[:E_A])
+                    assign(slice(E_A, E_A + E_B), pos_nB_grad_HB[:E_B])
+                    assign(
+                        slice(E_A + E_B, 2 * E_A + E_B),
+                        pos_nA_grad_HB[:E_A],
+                        negate=True,
+                    )
+                    assign(
+                        slice(2 * E_A + E_B, 2 * E_A + 2 * E_B),
+                        pos_nB_grad_HB[:E_B],
+                        negate=True,
+                    )
+                    assign(
+                        slice(2 * E_A + 2 * E_B, 2 * E_A + 2 * E_B + F_A),
+                        pos_nA_grad_HB[E_A:],
+                    )
+                    assign(slice(2 * E_A + 2 * E_B + F_A, D), pos_nB_grad_HB[E_B:])
+
+                    # Reshape the pnv gradient for this pair to (D, V_A, V_B)
+                    grad_pnv_ij = block_grad[i_local, j_local].reshape(D, V_A, V_B)
+
+                    # Compute contribution to pose gradients
+                    grad_HA_contrib = torch.einsum(
+                        "dv,dvk->k", grad_pnv_ij, pair_grad_HA
+                    )
+                    grad_HB_contrib = torch.einsum(
+                        "dv,dvk->k", grad_pnv_ij, pair_grad_HB
+                    )
+
+                    # Accumulate
+                    grad_HA[i_global] += grad_HA_contrib
+                    grad_HB[j_global] += grad_HB_contrib
+
+    return dist, {"grad_HA": grad_HA, "grad_HB": grad_HB}

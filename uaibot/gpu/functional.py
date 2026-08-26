@@ -42,11 +42,12 @@ def holder_min(
 
     if torch.all(m > 0):
         y = values / m.clamp_min(eps)
+        y = y.clamp_min(eps)  # ensure y is strictly positive
         out = m * y.pow(-p).sum(dim=dim, keepdim=True).pow(-1.0 / p)
 
     elif torch.all(m < 0):
         M = (-m).clamp_min(eps)  # since M = max(-x) = -min(x)
-        y = torch.clamp(-values / M, min=0.0)
+        y = torch.clamp(-values / M, min=eps)
         out = -M * y.pow(p).sum(dim=dim, keepdim=True).pow(1.0 / p)
 
     else:
@@ -55,7 +56,7 @@ def holder_min(
         pos = m * y_pos.pow(-p).sum(dim=dim, keepdim=True).pow(-1.0 / p)
 
         M = (-m).clamp_min(eps)
-        y_neg = torch.clamp(-values / M, min=0.0)
+        y_neg = torch.clamp(-values / M, min=eps)
         neg = -M * y_neg.pow(p).sum(dim=dim, keepdim=True).pow(1.0 / p)
 
         out = torch.where(m > 0, pos, torch.where(m < 0, neg, torch.zeros_like(m)))

@@ -5,7 +5,8 @@ from uaibot.simobjects import Box, ConvexPolytope
 
 
 def extract_VEF(obj):
-    """Extract vertices, edge directions, and face normals from a supported object.
+    """Extract vertices, edge directions, and face normals from a
+    supported object.
 
     Parameters
     ----------
@@ -20,14 +21,102 @@ def extract_VEF(obj):
     if isinstance(obj, Box):
         return get_VEF_from_box(obj.htm, obj.width, obj.depth, obj.height)
     elif isinstance(obj, ConvexPolytope):
-        return get_VEF_from_polytope(obj.htm, obj.A, obj.b)
+        return get_VEF_from_polytope(
+            np.array(obj.htm), np.array(obj.A), np.array(obj.b).ravel()
+        )
     else:
         raise TypeError(f"Unsupported object type for GPU distance: {type(obj)}")
 
 
+def get_VEF_from_polytope(htm, A, b, rtol=1e-8):
+    """Extract vertices, true edge directions, and face normals from a
+    convex polyhedron defined by halfspaces ``A x <= b``.
+
+    Parameters
+    ----------
+    htm : np.ndarray (4,4)
+        Homogeneous transformation matrix (world frame).
+    A : np.ndarray (F,3)
+        Outward unit normals in local frame.
+    b : np.ndarray (F,)
+        Face offsets (distance from origin to plane) in local frame.
+    rtol : float, optional
+        Tolerance for considering a vertex to lie on a face plane.
+        Default is 1e-8.
+
+    Returns
+    -------
+    vertices : torch.Tensor (V, 3)
+        Vertices in world frame.
+    edges : torch.Tensor (E, 3)
+        Unit direction vectors of each undirected edge in world frame.
+    normals : torch.Tensor (F, 3)
+        Outward unit normals of each face in world frame.
+    """
+
+    # 1. Local vertices from half‑space intersection
+    halfspaces = np.hstack([A, -b.reshape(-1, 1)])
+    hs = HalfspaceIntersection(halfspaces, np.zeros(3))
+    local_verts = hs.intersections
+    local_verts = np.unique(local_verts.round(decimals=10), axis=0)
+
+    nv = local_verts.shape[0]
+    nf = A.shape[0]
+
+    # 2. Find true edges: pairs of vertices that share at least two face planes
+    edge_indices = []
+    for i in range(nv):
+        vi = local_verts[i]
+        for j in range(i + 1, nv):
+            vj = local_verts[j]
+
+            common_faces = 0
+            for k in range(nf):
+                ni = A[k]
+                di = b[k]
+                on_i = abs(np.dot(ni, vi) - di) <= rtol
+                on_j = abs(np.dot(ni, vj) - di) <= rtol
+                if on_i and on_j:
+                    common_faces += 1
+
+            if common_faces >= 2:
+                edge_indices.append((i, j))
+
+    # 3. Compute unit direction vectors in local frame
+    local_edges = []
+    for i, j in edge_indices:
+        vec = local_verts[j] - local_verts[i]
+        norm = np.linalg.norm(vec)
+        if norm > rtol:
+            vec /= norm
+            local_edges.append(vec)
+
+    local_edges = np.array(local_edges)  # (E, 3) or (0,3) if none
+    if local_edges.size == 0:
+        local_edges = np.empty((0, 3), dtype=np.float32)
+    else:
+        local_edges = local_edges.astype(np.float32)
+
+    # 4. Transform to world frame
+    R = htm[:3, :3]
+    t = htm[:3, 3]
+
+    world_vertices = (R @ local_verts.T).T + t
+    world_edges = (R @ local_edges.T).T if local_edges.shape[0] > 0 else local_edges
+    world_normals = (R @ A.T).T
+
+    # 5. Return float32 tensors
+    return (
+        torch.tensor(world_vertices, dtype=torch.float32),
+        torch.tensor(world_edges, dtype=torch.float32),
+        torch.tensor(world_normals, dtype=torch.float32),
+    )
+
+
 def get_VEF_from_platonic(htm, A, b, rtol=1e-5):
     """Extract vertices, true edge directions, and face normals from a
-    convex polyhedron.
+    platonic solid (tetrahedron, cube, octahedron, dodecahedron,
+                    icosahedron)
 
     Parameters
     ----------
