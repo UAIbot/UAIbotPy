@@ -211,8 +211,7 @@ def holder_distance_with_grad(
     gamma: float,
     eps: float,
 ):
-    """
-    Compute the Hölder distance between two batches of convex polyhedra,
+    """Compute the Hölder distance between two batches of convex polyhedra,
     and the gradient of the sum of all distances with respect to the
     intermediate projected values (pnv).
 
@@ -262,36 +261,44 @@ def holder_distance_with_grad(
     loss = dist.sum()
     loss.backward()
     # Optionally convert back
-    dist = dist.float()
+    dist = dist.detach().float()
     grad = pnv_leaf.grad.float()
-    grad = torch.nan_to_num(grad, nan=0.0)  # replace NaN with 0
+    # grad = torch.nan_to_num(grad, nan=0.0)  # replace NaN with 0
     # Return detached distances and the gradient
     return dist, grad
 
 
 def se3_generators():
-    """Return the six 4x4 SE(3) Lie algebra generators (shape: 6,4,4)."""
+    """Return the six 4x4 SE(3) Lie algebra generators.
+
+    Shape: (6, 4, 4). The ordering is:
+      S[0] = rotation about x-axis   (angular velocity ω_x)
+      S[1] = rotation about y-axis   (angular velocity ω_y)
+      S[2] = rotation about z-axis   (angular velocity ω_z)
+      S[3] = translation along x-axis (linear velocity v_x)
+      S[4] = translation along y-axis (linear velocity v_y)
+      S[5] = translation along z-axis (linear velocity v_z)
+    """
     S = torch.zeros(6, 4, 4)
+    # Translation generators
+    S[0, 0, 3] = 1.0  # x translation
+    S[1, 1, 3] = 1.0  # y translation
+    S[2, 2, 3] = 1.0  # z translation
     # Rotation generators (skew-symmetric)
     # x-axis rotation
-    S[0, 0, 1] = -1.0
-    S[0, 1, 0] = 1.0
+    S[3, 0, 1] = -1.0
+    S[3, 1, 0] = 1.0
     # y-axis rotation
-    S[1, 0, 2] = 1.0
-    S[1, 2, 0] = -1.0
+    S[4, 0, 2] = 1.0
+    S[4, 2, 0] = -1.0
     # z-axis rotation
-    S[2, 1, 2] = -1.0
-    S[2, 2, 1] = 1.0
-    # Translation generators
-    S[3, 0, 3] = 1.0  # x translation
-    S[4, 1, 3] = 1.0  # y translation
-    S[5, 2, 3] = 1.0  # z translation
+    S[5, 1, 2] = -1.0
+    S[5, 2, 1] = 1.0
     return S
 
 
 def pnv_grad_SE3(normals_A, vertices_A, normals_B, vertices_B, S=None):
-    """
-    Compute the L-operator gradients of pnv = n^T (a - b) with respect to
+    """Compute the L-operator gradients of pnv = n^T (a - b) with respect to
     SE(3) poses, for all combinations of normals from A/B and vertices
     from A/B.
 
@@ -341,20 +348,17 @@ def pnv_grad_SE3(normals_A, vertices_A, normals_B, vertices_B, S=None):
         [vertices_B, torch.ones_like(vertices_B[..., :1])], dim=-1
     )  # (V_B,4)
 
+    # Precompute transposed generators
+    S_t = S.transpose(-1, -2)  # (6,4,4) with indices (g,j,i)
+
+    # Compute fundamental products with generator index g
     # Compute fundamental products using einsum
     # n^T S_i v (i: basis index, f: normal index, v: vertex index)
-    prod_nA_S_vA = torch.einsum("fi,iv,vj->fv", nA_h, S, vA_h)  # (F_A, V_A, 6)
-    prod_nA_St_vB = torch.einsum(
-        "fi,iv,vj->fv", nA_h, S.transpose(-1, -2), vB_h
-    )  # (F_A, V_B, 6)
-    prod_nB_S_vA = torch.einsum("fi,iv,vj->fv", nB_h, S, vA_h)  # (F_B, V_A, 6)
-    # prod_nB_St_vB = torch.einsum(
-    #     "fi,iv,vj->fv", nB_h, S.transpose(-1, -2), vB_h
-    # )  # (F_B, V_B, 6)
-    prod_nB_S_vB = torch.einsum("fi,iv,vj->fv", nB_h, S, vB_h)  # (F_B, V_B, 6)
-    prod_nB_St_vA = torch.einsum(
-        "fi,iv,vj->fv", nB_h, S.transpose(-1, -2), vA_h
-    )  # (F_B, V_A, 6)
+    prod_nA_S_vA = torch.einsum("fi,gij,vj->fvg", nA_h, S, vA_h)  # (F_A, V_A, 6)
+    prod_nA_St_vB = torch.einsum("fi,gji,vj->fvg", nA_h, S_t, vB_h)  # (F_A, V_B, 6)
+    prod_nB_S_vA = torch.einsum("fi,gij,vj->fvg", nB_h, S, vA_h)  # (F_B, V_A, 6)
+    prod_nB_St_vA = torch.einsum("fi,gji,vj->fvg", nB_h, S_t, vA_h)  # (F_B, V_A, 6)
+    prod_nB_S_vB = torch.einsum("fi,gij,vj->fvg", nB_h, S, vB_h)  # (F_B, V_B, 6)
 
     # Expand dimensions to combine over (V_A, V_B)
     # For n from A:
@@ -391,20 +395,38 @@ def holder_distance_objects_with_grad(
     device=None,
 ):
     """
-    Compute the Hölder distance between two heterogeneous sets of objects,
-    and the gradient of the sum of distances with respect to the left‑perturbation
-    of each object's SE(3) pose.
+    Compute Hölder distances and pose gradients for heterogeneous object sets.
+
+    Distances are computed between all objects in `objects_a` and `objects_b`
+    (or between objects in `objects_a` if `objects_b` is `None`). Gradients
+    are returned for the sum of all distances with respect to left‑perturbations
+    of the SE(3) poses.
+
+    Parameters
+    ----------
+    objects_a : list
+        Objects (e.g., `ub.Box`) in batch A.
+    objects_b : list, optional
+        Objects in batch B. If `None`, uses `objects_a` (self‑comparison).
+    gamma : float, default 2.0
+        Hölder parameter.
+    eps : float, default 1e-3
+        Numerical smoothing.
+    device : torch.device, optional
+        Device for tensors. If `None`, uses CUDA if available, else CPU.
 
     Returns
     -------
     dist : torch.Tensor, shape (N_A, N_B)
         Distance matrix.
-    grad_dict : dict of torch.Tensor:
-        'grad_HA': shape (N_A, 6)
-            Gradient of holder distance w.r.t. pose A for objects from A.
-        'grad_HB': shape (N_B, 6)
-            Gradient of holder distance w.r.t. pose B for objects from B.
+    grad_dict : dict of torch.Tensor
+        'grad_HA' : (N_A, 6) – gradient w.r.t. pose of each object in A.
+        'grad_HB' : (N_B, 6) – gradient w.r.t. pose of each object in B.
+        Gradient vector order: [v_x, v_y, v_z, ω_x, ω_y, ω_z]
+        (linear velocity first, angular velocity second).
+        If `objects_b is None`, `grad_HB` equals `grad_HA`.
     """
+
     if objects_b is None:
         objects_b = objects_a
 
@@ -495,72 +517,47 @@ def holder_distance_objects_with_grad(
                     pair_grad_HA = torch.zeros(D, V_A, V_B, 6, device=device)
                     pair_grad_HB = torch.zeros(D, V_A, V_B, 6, device=device)
 
-                    # Helper to assign slices
-                    def assign(slice_idx, grad_tensor, source, negate=False):
-                        if negate:
-                            pair_grad_HA[slice_idx] = -source
-                            pair_grad_HB[slice_idx] = -source
-                        else:
-                            pair_grad_HA[slice_idx] = source[
-                                ..., :6
-                            ]  # source already (...,6)
-                            pair_grad_HB[slice_idx] = source[..., :6]
+                    # Positive edges of A
+                    pair_grad_HA[:E_A] = pos_nA_grad_HA[:E_A]
+                    pair_grad_HB[:E_A] = pos_nA_grad_HB[:E_A]
 
-                    # Positive edges of A (first E_A entries in dirs_A)
-                    assign(slice(0, E_A), pos_nA_grad_HA[:E_A])
-                    # Positive edges of B (first E_B entries in dirs_B)
-                    assign(slice(E_A, E_A + E_B), pos_nB_grad_HA[:E_B])
-                    # Negative edges of A (negation of positive edges of A)
-                    assign(
-                        slice(E_A + E_B, 2 * E_A + E_B),
-                        pos_nA_grad_HA[:E_A],
-                        negate=True,
+                    # Positive edges of B
+                    pair_grad_HA[E_A : E_A + E_B] = pos_nB_grad_HA[:E_B]
+                    pair_grad_HB[E_A : E_A + E_B] = pos_nB_grad_HB[:E_B]
+
+                    # Negative edges of A (negated)
+                    pair_grad_HA[E_A + E_B : 2 * E_A + E_B] = -pos_nA_grad_HA[:E_A]
+                    pair_grad_HB[E_A + E_B : 2 * E_A + E_B] = -pos_nA_grad_HB[:E_A]
+
+                    # Negative edges of B (negated)
+                    pair_grad_HA[2 * E_A + E_B : 2 * E_A + 2 * E_B] = -pos_nB_grad_HA[
+                        :E_B
+                    ]
+                    pair_grad_HB[2 * E_A + E_B : 2 * E_A + 2 * E_B] = -pos_nB_grad_HB[
+                        :E_B
+                    ]
+
+                    # Normals of A
+                    pair_grad_HA[2 * E_A + 2 * E_B : 2 * E_A + 2 * E_B + F_A] = (
+                        pos_nA_grad_HA[E_A:]
                     )
-                    # Negative edges of B
-                    assign(
-                        slice(2 * E_A + E_B, 2 * E_A + 2 * E_B),
-                        pos_nB_grad_HA[:E_B],
-                        negate=True,
+                    pair_grad_HB[2 * E_A + 2 * E_B : 2 * E_A + 2 * E_B + F_A] = (
+                        pos_nA_grad_HB[E_A:]
                     )
-                    # Normals of A (last F_A entries)
-                    assign(
-                        slice(2 * E_A + 2 * E_B, 2 * E_A + 2 * E_B + F_A),
-                        pos_nA_grad_HA[E_A:],
-                    )
+
                     # Normals of B
-                    assign(slice(2 * E_A + 2 * E_B + F_A, D), pos_nB_grad_HA[E_B:])
-
-                    # But careful: for pair_grad_HB we need the corresponding HB gradients.
-                    # We'll rebuild using the same structure but with HB sources.
-                    pair_grad_HB = torch.zeros_like(pair_grad_HA)
-                    # Re‑assign with HB sources
-                    assign(slice(0, E_A), pos_nA_grad_HB[:E_A])
-                    assign(slice(E_A, E_A + E_B), pos_nB_grad_HB[:E_B])
-                    assign(
-                        slice(E_A + E_B, 2 * E_A + E_B),
-                        pos_nA_grad_HB[:E_A],
-                        negate=True,
-                    )
-                    assign(
-                        slice(2 * E_A + E_B, 2 * E_A + 2 * E_B),
-                        pos_nB_grad_HB[:E_B],
-                        negate=True,
-                    )
-                    assign(
-                        slice(2 * E_A + 2 * E_B, 2 * E_A + 2 * E_B + F_A),
-                        pos_nA_grad_HB[E_A:],
-                    )
-                    assign(slice(2 * E_A + 2 * E_B + F_A, D), pos_nB_grad_HB[E_B:])
+                    pair_grad_HA[2 * E_A + 2 * E_B + F_A : D] = pos_nB_grad_HA[E_B:]
+                    pair_grad_HB[2 * E_A + 2 * E_B + F_A : D] = pos_nB_grad_HB[E_B:]
 
                     # Reshape the pnv gradient for this pair to (D, V_A, V_B)
                     grad_pnv_ij = block_grad[i_local, j_local].reshape(D, V_A, V_B)
 
                     # Compute contribution to pose gradients
                     grad_HA_contrib = torch.einsum(
-                        "dv,dvk->k", grad_pnv_ij, pair_grad_HA
+                        "dab,dabk->k", grad_pnv_ij, pair_grad_HA
                     )
                     grad_HB_contrib = torch.einsum(
-                        "dv,dvk->k", grad_pnv_ij, pair_grad_HB
+                        "dab,dabk->k", grad_pnv_ij, pair_grad_HB
                     )
 
                     # Accumulate
