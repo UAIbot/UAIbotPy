@@ -4,7 +4,7 @@ from scipy.spatial import HalfspaceIntersection
 from uaibot.simobjects import Box, ConvexPolytope
 
 
-def extract_VEF(obj):
+def extract_VEF(obj, htm=None):
     """Extract vertices, edge directions, and face normals from a
     supported object.
 
@@ -12,17 +12,21 @@ def extract_VEF(obj):
     ----------
     obj : Box or ConvexPolytope
         UAIbotPy object with a homogeneous transform.
+    htm : np.ndarray (4,4)
+        Homogeneous transformation matrix (world frame).
 
     Returns
     -------
     tuple[torch.Tensor, torch.Tensor, torch.Tensor]
         Vertices, edge direction vectors, and face normals.
     """
+    if htm is None:
+        htm = obj.htm
     if isinstance(obj, Box):
-        return get_VEF_from_box(obj.htm, obj.width, obj.depth, obj.height)
+        return get_VEF_from_box(htm, obj.width, obj.depth, obj.height)
     elif isinstance(obj, ConvexPolytope):
         return get_VEF_from_polytope(
-            np.array(obj.htm), np.array(obj.A_local), np.array(obj.b_local).ravel()
+            np.array(htm), np.array(obj.A_local), np.array(obj.b_local).ravel()
         )
     else:
         raise TypeError(f"Unsupported object type for GPU distance: {type(obj)}")

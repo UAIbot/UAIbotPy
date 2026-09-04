@@ -390,6 +390,8 @@ def pnv_grad_SE3(normals_A, vertices_A, normals_B, vertices_B, S=None):
 def holder_distance_objects_with_grad(
     objects_a,
     objects_b=None,
+    htms_a=None,
+    htms_b=None,
     gamma=2.0,
     eps=1e-3,
     device=None,
@@ -408,6 +410,10 @@ def holder_distance_objects_with_grad(
         Objects (e.g., `ub.Box`) in batch A.
     objects_b : list, optional
         Objects in batch B. If `None`, uses `objects_a` (self‑comparison).
+    htms_a: list
+        Custom HTMs for each object in objects_a.
+    htms_b: list
+        Custom HTMs for each object in objects_b.
     gamma : float, default 2.0
         Hölder parameter.
     eps : float, default 1e-3
@@ -430,12 +436,18 @@ def holder_distance_objects_with_grad(
     if objects_b is None:
         objects_b = objects_a
 
+    if htms_a is None:
+        htms_a = [obj.htm for obj in objects_a]
+
+    if htms_b is None:
+        htms_b = [obj.htm for obj in objects_b]
+
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Extract components (vertices, edges, face normals)
-    comp_a = [extract_VEF(obj) for obj in objects_a]
-    comp_b = [extract_VEF(obj) for obj in objects_b]
+    comp_a = [extract_VEF(obj, htms_a[i]) for i, obj in enumerate(objects_a)]
+    comp_b = [extract_VEF(obj, htms_b[i]) for i, obj in enumerate(objects_b)]
 
     # Group by signature
     def group_indices(components):
