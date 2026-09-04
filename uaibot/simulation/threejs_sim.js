@@ -667,6 +667,38 @@ class Robot extends Objsim {
 	}
 }
 
+class Curve extends Objsim {
+    constructor(_frames, _color, _size) {
+        // _frames: array of [time, flatPointsArray]
+        // flatPointsArray is a flat array of numbers: [x0,y0,z0, x1,y1,z1, ...]
+        super(_frames);
+
+        this.color = _color;
+        this.size = _size;
+        this.frames = _frames; // already set in super
+
+        // Determine number of points from the first frame (if any)
+        if (this.frames.length > 0) {
+            const firstFlat = this.frames[0][1];
+            this.numPoints = firstFlat.length / 3;
+        } else {
+            this.numPoints = 0;
+        }
+
+        // Create geometry and material
+        const geometry = new BufferGeometry();
+        const material = new PointsMaterial({ color: this.color, size: this.size });
+        this.shape = new Points(geometry, material);
+    }
+
+    showFrame() {
+        // currentFrame is updated by Objsim's nextFrame() or setFrameTime()
+        const flatPoints = this.frames[this.currentFrame][1];
+        this.shape.geometry.setAttribute('position', new Float32BufferAttribute(flatPoints, 3));
+    }
+
+    setEnvMap(envMap) { }
+}
 //------------------------------------------------------------
 
 //--------------- BASIC ELEMENTS OF ANY SCENE ----------------
