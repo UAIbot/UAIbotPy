@@ -22,7 +22,7 @@ def extract_VEF(obj):
         return get_VEF_from_box(obj.htm, obj.width, obj.depth, obj.height)
     elif isinstance(obj, ConvexPolytope):
         return get_VEF_from_polytope(
-            np.array(obj.htm), np.array(obj.A), np.array(obj.b).ravel()
+            np.array(obj.htm), np.array(obj.A_local), np.array(obj.b_local).ravel()
         )
     else:
         raise TypeError(f"Unsupported object type for GPU distance: {type(obj)}")
