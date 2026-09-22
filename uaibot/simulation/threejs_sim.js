@@ -689,6 +689,7 @@ class Curve extends Objsim {
         const geometry = new BufferGeometry();
         const material = new PointsMaterial({ color: this.color, size: this.size });
         this.shape = new Points(geometry, material);
+        this.shape.frustumCulled = false;
     }
 
     showFrame() {
