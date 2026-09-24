@@ -5,12 +5,12 @@ except ImportError:
     # Fallback for old versions
     from IPython.core.display import display, HTML
 import re
-from utils import *
-from graphics.meshmaterial import *
-from simobjects.box import *
-from simobjects.pointlight import *
-from simobjects.pointcloud import *
-from simobjects.frame import *
+from uaibot.utils import *
+from uaibot.graphics.meshmaterial import *
+from uaibot.simobjects.box import *
+from uaibot.simobjects.pointlight import *
+from uaibot.simobjects.pointcloud import *
+from uaibot.simobjects.frame import *
 import time
 from pathlib import Path
 import httplib2

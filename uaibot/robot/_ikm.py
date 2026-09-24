@@ -1,4 +1,4 @@
-from utils import *
+from uaibot.utils import *
 import numpy as np
 import os
 from ._check_free_config import *

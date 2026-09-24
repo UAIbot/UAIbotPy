@@ -1,7 +1,7 @@
 import numpy as np
-from utils import *
-from graphics.texture import *
-from utils import *
+from uaibot.utils import *
+from uaibot.graphics.texture import *
+from uaibot.utils import *
 from .texture import *
 
 class MeshMaterial:

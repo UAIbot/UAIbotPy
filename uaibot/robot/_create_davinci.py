@@ -1,9 +1,9 @@
-import robot as rb
-from utils import Utils
+import uaibot.robot as rb
+from uaibot.utils import Utils
 
-from simobjects.group import Group
-from robot._create_davinci_arms import _create_davinci_arm1, _create_davinci_arm2, _create_davinci_arm3, _create_davinci_arm4
-from robot._create_davinci_chest import _create_davinci_chest
+from uaibot.simobjects.group import Group
+from uaibot.robot._create_davinci_arms import _create_davinci_arm1, _create_davinci_arm2, _create_davinci_arm3, _create_davinci_arm4
+from uaibot.robot._create_davinci_chest import _create_davinci_chest
 import numpy as np
 
 

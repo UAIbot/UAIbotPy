@@ -1,4 +1,4 @@
-from utils import *
+from uaibot.utils import *
 import numpy as np
 
 from uaibot.graphics.meshmaterial import *
@@ -12,11 +12,10 @@ if TYPE_CHECKING:
     from uaibot.graphics.meshmaterial import MeshMaterial
     
 import os
-from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject
+from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject, Simple
 from typing import Optional, Tuple, List
 
-
-class Ball:
+class Ball(Simple):
     """
   A ball object.
 

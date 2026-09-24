@@ -1,19 +1,19 @@
-from utils import *
+from uaibot.utils import *
 
-from graphics.meshmaterial import *
-from graphics.model3d import *
+from uaibot.graphics.meshmaterial import *
+from uaibot.graphics.model3d import *
 
-from simobjects.ball import *
-from simobjects.box import *
-from simobjects.cylinder import *
-from simobjects.rigidobject import *
-from simobjects.group import *
+from uaibot.simobjects.ball import *
+from uaibot.simobjects.box import *
+from uaibot.simobjects.cylinder import *
+from uaibot.simobjects.rigidobject import *
+from uaibot.simobjects.group import *
 
 from .links import *
 
-from robot._create_darwin_mini_arm import _create_darwin_mini_arm
-from robot._create_darwin_mini_leg_left import _create_darwin_mini_leg_left
-from robot._create_darwin_mini_leg_right import _create_darwin_mini_leg_right
+from uaibot.robot._create_darwin_mini_arm import _create_darwin_mini_arm
+from uaibot.robot._create_darwin_mini_leg_left import _create_darwin_mini_leg_left
+from uaibot.robot._create_darwin_mini_leg_right import _create_darwin_mini_leg_right
 
 
 

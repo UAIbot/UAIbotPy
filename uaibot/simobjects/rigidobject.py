@@ -1,6 +1,6 @@
-from utils import *
+from uaibot.utils import *
 import numpy as np
-from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject
+from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject, Groupable
 from typing import Optional, Tuple, List
 
 from uaibot.graphics.model3d  import *
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from uaibot.graphics.model3d import Model3D
 
 
-class RigidObject:
+class RigidObject(Groupable):
     """
    A rigid object.
 

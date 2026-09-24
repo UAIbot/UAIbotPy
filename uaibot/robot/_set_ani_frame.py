@@ -1,4 +1,4 @@
-from utils import *
+from uaibot.utils import *
 
 
 # Set config. Restart animation queue

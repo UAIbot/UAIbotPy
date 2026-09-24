@@ -1,6 +1,6 @@
 import numpy as np
-from utils import *
-from graphics.model3d import *
+from uaibot.utils import *
+from uaibot.graphics.model3d import *
 
 
 class Link:

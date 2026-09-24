@@ -1,4 +1,4 @@
-from utils import *
+from uaibot.utils import *
 import numpy as np
 
 def _add_ani_frame(self, time, q=None, htm=None, enforce_joint_limits=False):

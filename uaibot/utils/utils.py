@@ -964,7 +964,7 @@ class Utils:
       is_type: boolean
           If the object is of the type.
       """
-        return Utils.get_uaibot_type(obj) in Utils.IS_SIMPLE
+        return isinstance(obj, Simple)
 
     @staticmethod
     def is_a_metric_object(obj):
@@ -982,7 +982,7 @@ class Utils:
       is_type: boolean
           If the object is of the type.
       """
-        return Utils.get_uaibot_type(obj) in Utils.IS_METRIC
+        return isinstance(obj, Metric)
     
     @staticmethod
     def is_a_groupable_object(obj):
@@ -1000,7 +1000,7 @@ class Utils:
       is_type: boolean
           If the object is of the type.   
       """
-        return Utils.get_uaibot_type(obj) in Utils.IS_GROUPABLE
+        return isinstance(obj, Groupable)
 
     @staticmethod
     def is_a_obj_sim(obj):
@@ -1018,7 +1018,7 @@ class Utils:
       is_type: boolean
           If the object is of the type.   
       """
-        return Utils.get_uaibot_type(obj) in Utils.IS_OBJ_SIM
+        return isinstance(obj, ObjSim)
 
 
     @staticmethod

@@ -1,4 +1,4 @@
-from utils import *
+from uaibot.utils import *
 import numpy as np
 import os
 
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from uaibot.simobjects.box import Box
 
     
-from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject
+from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject, Metric
 from typing import Optional, Tuple, List
 
 
@@ -19,7 +19,7 @@ if os.environ['CPP_SO_FOUND']=="1":
     import uaibot_cpp_bind as ub_cpp
 
 
-class PointCloud:
+class PointCloud(Metric):
     """
    A cloud of points to draw in the simulator.
 

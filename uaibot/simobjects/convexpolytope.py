@@ -1,4 +1,4 @@
-from utils import *
+from uaibot.utils import *
 import numpy as np
 from scipy.spatial import HalfspaceIntersection, ConvexHull
 from scipy.optimize import linprog
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from uaibot.graphics.meshmaterial import MeshMaterial
     
 import os
-from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject
+from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject, Simple
 from typing import Optional, Tuple, List
 
 def is_unbounded(A, b):
@@ -88,7 +88,7 @@ def compute_htm(points):
     
     return np.matrix(transformation_matrix)
 
-class ConvexPolytope:
+class ConvexPolytope(Simple):
     """
   A convex polytope object.
 

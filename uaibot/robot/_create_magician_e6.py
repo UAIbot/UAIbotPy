@@ -1,12 +1,12 @@
-from utils import *
+from uaibot.utils import *
 
-from graphics.meshmaterial import *
-from graphics.mtlmeshmaterial import *
-from graphics.model3d import *
+from uaibot.graphics.meshmaterial import *
+from uaibot.graphics.mtlmeshmaterial import *
+from uaibot.graphics.model3d import *
 
-from simobjects.ball import *
-from simobjects.box import *
-from simobjects.cylinder import *
+from uaibot.simobjects.ball import *
+from uaibot.simobjects.box import *
+from uaibot.simobjects.cylinder import *
 
 from .links import *
 
