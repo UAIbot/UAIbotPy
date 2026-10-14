@@ -210,6 +210,7 @@ def holder_distance_with_grad(
     facenormalsB: torch.Tensor,
     gamma: float,
     eps: float,
+    reduce_fn=None,
 ):
     """Compute the Hölder distance between two batches of convex polyhedra,
     and the gradient of the sum of all distances with respect to the
@@ -258,26 +259,22 @@ def holder_distance_with_grad(
     dist = _aggregate_holder_distance(pnv_leaf, gamma, eps)
 
     # Backward on the sum of distances
-    loss = dist.sum()
+    loss = dist.sum() if reduce_fn is None else reduce_fn(dist)
     loss.backward()
-    # Optionally convert back
-    dist = dist.detach().float()
-    grad = pnv_leaf.grad.float()
-    # grad = torch.nan_to_num(grad, nan=0.0)  # replace NaN with 0
-    # Return detached distances and the gradient
-    return dist, grad
+
+    return dist.detach().float(), pnv_leaf.grad.float()
 
 
 def se3_generators():
     """Return the six 4x4 SE(3) Lie algebra generators.
 
     Shape: (6, 4, 4). The ordering is:
-      S[0] = rotation about x-axis   (angular velocity ω_x)
-      S[1] = rotation about y-axis   (angular velocity ω_y)
-      S[2] = rotation about z-axis   (angular velocity ω_z)
-      S[3] = translation along x-axis (linear velocity v_x)
-      S[4] = translation along y-axis (linear velocity v_y)
-      S[5] = translation along z-axis (linear velocity v_z)
+      S[0] = translation along x-axis (linear velocity v_x)
+      S[1] = translation along y-axis (linear velocity v_y)
+      S[2] = translation along z-axis (linear velocity v_z)
+      S[3] = rotation about x-axis   (angular velocity ω_x)
+      S[4] = rotation about y-axis   (angular velocity ω_y)
+      S[5] = rotation about z-axis   (angular velocity ω_z)
     """
     S = torch.zeros(6, 4, 4)
     # Translation generators
@@ -286,14 +283,14 @@ def se3_generators():
     S[2, 2, 3] = 1.0  # z translation
     # Rotation generators (skew-symmetric)
     # x-axis rotation
-    S[3, 0, 1] = -1.0
-    S[3, 1, 0] = 1.0
+    S[3, 1, 2] = -1.0
+    S[3, 2, 1] = 1.0
     # y-axis rotation
     S[4, 0, 2] = 1.0
     S[4, 2, 0] = -1.0
     # z-axis rotation
-    S[5, 1, 2] = -1.0
-    S[5, 2, 1] = 1.0
+    S[5, 0, 1] = -1.0
+    S[5, 1, 0] = 1.0
     return S
 
 
@@ -335,49 +332,27 @@ def pnv_grad_SE3(normals_A, vertices_A, normals_B, vertices_B, S=None):
         S = se3_generators().to(normals_A.device)
 
     # Convert to homogeneous coordinates
-    nA_h = torch.cat(
-        [normals_A, torch.zeros_like(normals_A[..., :1])], dim=-1
-    )  # (F_A,4)
-    nB_h = torch.cat(
-        [normals_B, torch.zeros_like(normals_B[..., :1])], dim=-1
-    )  # (F_B,4)
-    vA_h = torch.cat(
-        [vertices_A, torch.ones_like(vertices_A[..., :1])], dim=-1
-    )  # (V_A,4)
-    vB_h = torch.cat(
-        [vertices_B, torch.ones_like(vertices_B[..., :1])], dim=-1
-    )  # (V_B,4)
+    # (F_A,4)
+    nA_h = torch.cat([normals_A, torch.zeros_like(normals_A[..., :1])], dim=-1)
+    # (F_B,4)
+    nB_h = torch.cat([normals_B, torch.zeros_like(normals_B[..., :1])], dim=-1)
+    # (V_A,4)
+    vA_h = torch.cat([vertices_A, torch.ones_like(vertices_A[..., :1])], dim=-1)
+    # (V_B,4)
+    vB_h = torch.cat([vertices_B, torch.ones_like(vertices_B[..., :1])], dim=-1)
 
-    # Precompute transposed generators
-    S_t = S.transpose(-1, -2)  # (6,4,4) with indices (g,j,i)
+    NA, VA = nA_h.shape[0], vA_h.shape[0]
+    NB, VB = nB_h.shape[0], vB_h.shape[0]
 
-    # Compute fundamental products with generator index g
-    # Compute fundamental products using einsum
-    # n^T S_i v (i: basis index, f: normal index, v: vertex index)
-    prod_nA_S_vA = torch.einsum("fi,gij,vj->fvg", nA_h, S, vA_h)  # (F_A, V_A, 6)
-    prod_nA_St_vB = torch.einsum("fi,gji,vj->fvg", nA_h, S_t, vB_h)  # (F_A, V_B, 6)
-    prod_nB_S_vA = torch.einsum("fi,gij,vj->fvg", nB_h, S, vA_h)  # (F_B, V_A, 6)
-    prod_nB_St_vA = torch.einsum("fi,gji,vj->fvg", nB_h, S_t, vA_h)  # (F_B, V_A, 6)
-    prod_nB_S_vB = torch.einsum("fi,gij,vj->fvg", nB_h, S, vB_h)  # (F_B, V_B, 6)
+    # n_a^T S_g v_b  -> (NA, VB, 6)
+    prod_nA_S_vB = torch.einsum("fi,gij,vj->fvg", nA_h, S, vB_h)
+    # n_b^T S_g v_a  -> (NB, VA, 6)
+    prod_nB_S_vA = torch.einsum("fi,gij,vj->fvg", nB_h, S, vA_h)
 
-    # Expand dimensions to combine over (V_A, V_B)
-    # For n from A:
-    #   grad_HA = 2 * nA^T S a_A - nA^T S^T b_B
-    grad_HA_nA = (
-        2.0 * prod_nA_S_vA[:, :, None, :] - prod_nA_St_vB[:, None, :, :]
-    )  # (F_A, V_A, V_B, 6)
-    #   grad_HB = - nA^T S b_B
-    grad_HB_nA = -prod_nA_St_vB[:, None, :, :]
-
-    # For n from B:
-    #   grad_HA = nB^T S a_A
-    grad_HA_nB = prod_nB_S_vA[:, :, None, :]  # (F_B, V_A, V_B, 6)
-    #   grad_HB = nB^T S^T a_A - nB^T S^T b_B - nB^T S b_B
-    grad_HB_nB = (
-        prod_nB_St_vA[:, :, None, :]
-        # - prod_nB_St_vB[:, None, :, :]
-        - 2.0 * prod_nB_S_vB[:, None, :, :]
-    )
+    grad_HA_nA = prod_nA_S_vB[:, None, :, :].expand(NA, VA, VB, 6)
+    grad_HB_nA = -prod_nA_S_vB[:, None, :, :].expand(NA, VA, VB, 6)
+    grad_HA_nB = prod_nB_S_vA[:, :, None, :].expand(NB, VA, VB, 6)
+    grad_HB_nB = -prod_nB_S_vA[:, :, None, :].expand(NB, VA, VB, 6)
 
     return {
         "nA_grad_HA": grad_HA_nA,
@@ -395,6 +370,7 @@ def holder_distance_objects_with_grad(
     gamma=2.0,
     eps=1e-3,
     device=None,
+    reduce_fn=None,
 ):
     """
     Compute Hölder distances and pose gradients for heterogeneous object sets.
@@ -479,7 +455,7 @@ def holder_distance_objects_with_grad(
 
             # Compute block distances and pnv gradient (w.r.t. pnv)
             block_dist, block_grad = holder_distance_with_grad(
-                vA, eA, nA, vB, eB, nB, gamma, eps
+                vA, eA, nA, vB, eB, nB, gamma, eps, reduce_fn=reduce_fn
             )  # block_dist: (len(idx_a), len(idx_b)), block_grad: (len(idx_a), len(idx_b), D, V)
 
             # Dimensions
