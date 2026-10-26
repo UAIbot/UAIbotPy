@@ -433,3 +433,9 @@ VectorFieldResult vectorfield_SE3(
     const vector<Eigen::MatrixXd>& curve_derivative =
         std::vector<Eigen::MatrixXd>(),
     double delta = c_delta, double ds = c_ds);
+
+double EEdistance(const Eigen::Matrix4d V, const Eigen::Matrix4d W);
+
+Eigen::Matrix4d expSE3(const Eigen::Matrix4d X);
+
+Eigen::Matrix4d SmapSE3(const Eigen::VectorXd xi);

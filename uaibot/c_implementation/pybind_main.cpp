@@ -292,6 +292,9 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
         py::arg("kn2"),
         py::arg("curve_derivative") = std::vector<Eigen::MatrixXd>(),
         py::arg("delta") = c_delta, py::arg("ds") = c_ds);
+  m.def("ee_distance", &EEdistance, py::arg("X"), py::arg("Y"));
+  m.def("SmapSE3", &SmapSE3, py::arg("xi"));
+  m.def("expSE3", &expSE3, py::arg("X"));
   m.def("distance_box2box", &distBox2Box, py::arg("box1"), py::arg("box2"),
         py::arg("gamma"), py::arg("is_conservative") = true,
         py::arg("skip_gradient") = false, py::arg("epsilon") = 1e-6f,

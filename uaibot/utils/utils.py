@@ -1063,7 +1063,10 @@ class Utils:
             return " must be an file of the types: '" + str(types) + "'"
 
         try:
-            h = httplib2.Http(disable_ssl_certificate_validation=True) #Change this later
+            h = httplib2.Http(
+                disable_ssl_certificate_validation=True,
+                timeout=45,
+            ) #Change this later
             resp = h.request(url, 'HEAD')
             if int(resp[0]['status']) < 400:
                 return "ok!"
@@ -1328,7 +1331,8 @@ def smooth_min(x: List[float], r: float) -> float:
 def smooth_max(x: List[float], r: float) -> float:
     return ub_cpp.smooth_max(x, r)
 
+def expSE3(X: np.ndarray):
+    return ub_cpp.expSE3(X)
 
-
-
-
+def SmapSE3(xi: np.ndarray):
+    return ub_cpp.SmapSE3(X)
