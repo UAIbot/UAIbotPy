@@ -1335,4 +1335,4 @@ def expSE3(X: np.ndarray):
     return ub_cpp.expSE3(X)
 
 def SmapSE3(xi: np.ndarray):
-    return ub_cpp.SmapSE3(X)
+    return ub_cpp.SmapSE3(xi)
