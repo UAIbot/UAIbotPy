@@ -26,11 +26,15 @@
 
 #include "declarations.h"
 #include "smooth_functions.hpp"
+#include "bluerov2_physics.hpp"
 
 using namespace std;
 using namespace std::chrono;
 using namespace Eigen;
 namespace py = pybind11;
+using bluerov2::State;
+using bluerov2::Parameters;
+using bluerov2::Vec8;
 
 PYBIND11_MODULE(uaibot_cpp_bind, m) {
   m.doc() = "UAIBot C++ interface";
@@ -352,4 +356,68 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
       py::arg("vertices1"), py::arg("vertices2"), py::arg("normals1"),
       py::arg("normals2"), py::arg("edge_normals"), py::arg("gamma"),
       py::arg("skip_gradient") = false, py::arg("epsilon") = 1e-6f);
+
+
+  // ---- State -------------------------------------------------------------
+  py::class_<State>(m, "FossenState")
+      .def(py::init([]() {
+          State s;
+          s.pose            = Eigen::Matrix4d::Identity();
+          s.twist           = Eigen::VectorXd::Zero(6);
+          s.thruster_forces = Vec8::Zero();   // if Vec8 is fixed-size Eigen
+          return s;
+      }))
+      .def_readwrite("pose",            &State::pose)
+      .def_readwrite("twist",           &State::twist)
+      .def_readwrite("thruster_forces", &State::thruster_forces);
+
+  // ---- Parameters --------------------------------------------------------
+  py::class_<Parameters>(m, "FossenParameters")
+      .def(py::init<>())   // requires a default constructor
+      .def_readwrite("dt",                     &Parameters::dt)
+      .def_readwrite("max_internal_dt",        &Parameters::max_internal_dt)
+      .def_readwrite("velocity_gains",         &Parameters::velocity_gains)
+      .def_readwrite("model_compensation",     &Parameters::model_compensation)
+      .def_readwrite("thruster_time_constant", &Parameters::thruster_time_constant);
+
+  m.def(
+      "fossen_step",
+      [](const Eigen::VectorXd &target_twist,
+         const State &state,
+         const Parameters &p) {
+        return bluerov2::step(target_twist, state, p);
+      },
+      py::arg("target_twist"),
+      py::arg("state"),
+      py::arg("p") = Parameters());
+
+  // Stateless interface (motor lag must be disabled).
+  m.def(
+      "fossen_step_stateless",
+      [](const Eigen::VectorXd &target_twist,
+         const Eigen::Matrix4d &pose,
+         const Eigen::VectorXd &current_twist,
+         const Parameters &p) {
+        return bluerov2::step(target_twist, pose, current_twist, p);
+      },
+      py::arg("target_twist"),
+      py::arg("pose"),
+      py::arg("current_twist"),
+      py::arg("p") = Parameters());
+
+  // Convenience overload: gains and dt supplied directly.
+  m.def(
+      "fossen_step_direct",
+      [](const Eigen::VectorXd &target_twist,
+         const Eigen::Matrix4d &pose,
+         const Eigen::VectorXd &current_twist,
+         const Eigen::VectorXd &velocity_gains,
+         double dt) {
+        return bluerov2::step(target_twist, pose, current_twist, velocity_gains, dt);
+      },
+      py::arg("target_twist"),
+      py::arg("pose"),
+      py::arg("current_twist"),
+      py::arg("velocity_gains"),
+      py::arg("dt"));
 }
