@@ -378,6 +378,7 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
       .def_readwrite("max_internal_dt",        &Parameters::max_internal_dt)
       .def_readwrite("velocity_gains",         &Parameters::velocity_gains)
       .def_readwrite("model_compensation",     &Parameters::model_compensation)
+      .def_readwrite("allocation_weights", &Parameters::allocation_weights)
       .def_readwrite("thruster_time_constant", &Parameters::thruster_time_constant);
 
   m.def(
