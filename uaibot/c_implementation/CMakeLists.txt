@@ -42,7 +42,7 @@ set_target_properties(Eigen3::Eigen PROPERTIES
 
 
 # Set C++ standard and optimization flags
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 if(MSVC)
     # Enable math constants (M_PI etc.) and strict standards compliance
     message(STATUS "[DEBUG] Using MSVC")

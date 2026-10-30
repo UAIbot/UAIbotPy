@@ -24,17 +24,20 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
+#include "bluerov2_physics.hpp"
 #include "declarations.h"
 #include "smooth_functions.hpp"
-#include "bluerov2_physics.hpp"
 
 using namespace std;
 using namespace std::chrono;
 using namespace Eigen;
 namespace py = pybind11;
-using bluerov2::State;
 using bluerov2::Parameters;
+using bluerov2::State;
 using bluerov2::Vec8;
+using bluerov2::Measurement;
+using bluerov2::MeasurementNoiseParameters;
+using bluerov2::Diagnostics;
 
 PYBIND11_MODULE(uaibot_cpp_bind, m) {
   m.doc() = "UAIBot C++ interface";
@@ -181,7 +184,7 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
                       &GeometricPrimitives::create_sphere),
                   py::arg("htm"), py::arg("radius"))
       .def_static("create_pointcloud",
-                  static_cast<GeometricPrimitives (*)(vector<Vector3f> &)>(
+                  static_cast<GeometricPrimitives (*)(vector<Vector3f>&)>(
                       &GeometricPrimitives::create_pointcloud),
                   py::arg("points"))
       .def_static(
@@ -219,7 +222,7 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
       .def(py::init<>())
       .def("fk",
            static_cast<vector<FKResult> (Manipulator::*)(
-               const vector<VectorXf> &, const vector<Matrix4f> &, bool) const>(
+               const vector<VectorXf>&, const vector<Matrix4f>&, bool) const>(
                &Manipulator::fk),
            py::arg("q"), py::arg("htm_world_base"), py::arg("compute_jac"))
       .def("fk",
@@ -281,10 +284,12 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
       .def("__repr__", &Manipulator::toString)
       .def("signed_distance", &Manipulator::signedDistance, py::arg("obj"),
            py::arg("q"), py::arg("htm"), py::arg("max_dist"), py::arg("gamma"),
-           py::arg("is_conservative") = true, py::arg("epsilon") = 1e-6f, py::arg("eps_edge") = -1)
+           py::arg("is_conservative") = true, py::arg("epsilon") = 1e-6f,
+           py::arg("eps_edge") = -1)
       .def("signed_distance_auto", &Manipulator::signedDistanceAuto,
            py::arg("q"), py::arg("max_dist"), py::arg("gamma"),
-           py::arg("is_conservative") = true, py::arg("epsilon")=1e-6f, py::arg("eps_edge")=-1);
+           py::arg("is_conservative") = true, py::arg("epsilon") = 1e-6f,
+           py::arg("eps_edge") = -1);
 
   m.def("vectorfield_rn", &vectorfield_rn, py::arg("q"), py::arg("q_path"),
         py::arg("alpha"), py::arg("const_velocity"), py::arg("is_closed"),
@@ -311,8 +316,8 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
   // Overloaded functions:
   m.def(
       "get_candidate_normals",
-      [](const GeometricPrimitives &polyhedron1,
-         const GeometricPrimitives &polyhedron2, bool is_conservative,
+      [](const GeometricPrimitives& polyhedron1,
+         const GeometricPrimitives& polyhedron2, bool is_conservative,
          float epsEdge) {
         return getCandidateNormals(polyhedron1, polyhedron2, is_conservative,
                                    epsEdge);
@@ -321,21 +326,22 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
       py::arg("is_conservative") = false, py::arg("eps_edge") = 1e-6f);
   m.def(
       "smooth_min",
-      [](const std::vector<float> &values, float r) {
+      [](const std::vector<float>& values, float r) {
         return smoothMinListWithGradient(values, r);
       },
       py::arg("values"), py::arg("r"));
   m.def(
       "smooth_max",
-      [](const std::vector<float> &values, float r) {
+      [](const std::vector<float>& values, float r) {
         return smoothMaxListWithGradient(values, r);
       },
       py::arg("values"), py::arg("r"));
   m.def(
       "distance_set2set",
-      [](const GeometricPrimitives &polyhedron1,
-         const GeometricPrimitives &polyhedron2, float gamma,
-         bool is_conservative, bool skip_gradient, float epsilon, float epsEdge) {
+      [](const GeometricPrimitives& polyhedron1,
+         const GeometricPrimitives& polyhedron2, float gamma,
+         bool is_conservative, bool skip_gradient, float epsilon,
+         float epsEdge) {
         return distSet2Set(polyhedron1, polyhedron2, gamma, is_conservative,
                            skip_gradient, epsilon, epsEdge);
       },
@@ -357,68 +363,136 @@ PYBIND11_MODULE(uaibot_cpp_bind, m) {
       py::arg("normals2"), py::arg("edge_normals"), py::arg("gamma"),
       py::arg("skip_gradient") = false, py::arg("epsilon") = 1e-6f);
 
-
   // ---- State -------------------------------------------------------------
   py::class_<State>(m, "FossenState")
-      .def(py::init([]() {
-          State s;
-          s.pose            = Eigen::Matrix4d::Identity();
-          s.twist           = Eigen::VectorXd::Zero(6);
-          s.thruster_forces = Vec8::Zero();   // if Vec8 is fixed-size Eigen
-          return s;
-      }))
-      .def_readwrite("pose",            &State::pose)
-      .def_readwrite("twist",           &State::twist)
-      .def_readwrite("thruster_forces", &State::thruster_forces);
+      .def(py::init<>())  // State defaults handle the initial pose, twist, etc.
+      .def_readwrite("pose", &State::pose)
+      .def_readwrite("twist", &State::twist)
+      .def_readwrite("thruster_forces", &State::thruster_forces)
+      .def_readwrite("diagnostics", &State::diagnostics)
+      .def_readwrite("time", &State::time)
+      .def_readwrite("measurement", &State::measurement);
 
   // ---- Parameters --------------------------------------------------------
   py::class_<Parameters>(m, "FossenParameters")
-      .def(py::init<>())   // requires a default constructor
-      .def_readwrite("dt",                     &Parameters::dt)
-      .def_readwrite("max_internal_dt",        &Parameters::max_internal_dt)
-      .def_readwrite("velocity_gains",         &Parameters::velocity_gains)
-      .def_readwrite("model_compensation",     &Parameters::model_compensation)
+      .def(py::init<>())
+      .def_readwrite("dt", &Parameters::dt)
+      .def_readwrite("max_internal_dt", &Parameters::max_internal_dt)
+      .def_readwrite("velocity_gains", &Parameters::velocity_gains)
+      .def_readwrite("model_compensation", &Parameters::model_compensation)
+      .def_readwrite("measurement_noise", &Parameters::measurement_noise)
+
+      // Physical parameters
+      .def_readwrite("mass", &Parameters::mass)
+      .def_readwrite("gravity", &Parameters::gravity)
+      .def_readwrite("water_density", &Parameters::water_density)
+      .def_readwrite("displaced_volume", &Parameters::displaced_volume)
+      .def_readwrite("inertia_at_cg_body", &Parameters::inertia_at_cg_body)
+      .def_readwrite("center_of_gravity_body",
+                     &Parameters::center_of_gravity_body)
+      .def_readwrite("center_of_buoyancy_body",
+                     &Parameters::center_of_buoyancy_body)
+      .def_readwrite("added_mass_body_at_reference_density",
+                     &Parameters::added_mass_body_at_reference_density)
+      .def_readwrite("linear_damping_body_at_reference_density",
+                     &Parameters::linear_damping_body_at_reference_density)
+      .def_readwrite("quadratic_damping_body_at_reference_density",
+                     &Parameters::quadratic_damping_body_at_reference_density)
+      .def_readwrite("hydrodynamic_reference_density",
+                     &Parameters::hydrodynamic_reference_density)
+
+      // Disturbances
+      .def_readwrite("current_world", &Parameters::current_world)
+      .def_readwrite("external_wrench_world",
+                     &Parameters::external_wrench_world)
+
+      // Thruster geometry and limits
+      .def_readwrite("thruster_positions_body",
+                     &Parameters::thruster_positions_body)
+      .def_readwrite("positive_thrust_axes_body",
+                     &Parameters::positive_thrust_axes_body)
+      .def_readwrite("thrust_max", &Parameters::thrust_max)
+      .def_readwrite("thrust_min", &Parameters::thrust_min)
+      .def_readwrite("reaction_moment_per_newton",
+                     &Parameters::reaction_moment_per_newton)
+
+      // Allocation
       .def_readwrite("allocation_weights", &Parameters::allocation_weights)
-      .def_readwrite("thruster_time_constant", &Parameters::thruster_time_constant);
+      .def_readwrite("allocation_regularization",
+                     &Parameters::allocation_regularization)
+      .def_readwrite("allocation_max_iterations",
+                     &Parameters::allocation_max_iterations)
+      .def_readwrite("allocation_tolerance", &Parameters::allocation_tolerance)
+
+      // Actuator lag
+      .def_readwrite("thruster_time_constant",
+                     &Parameters::thruster_time_constant);
+
+  // ---- MeasurementNoiseParameters ----------------------------------------
+  py::class_<MeasurementNoiseParameters>(m, "FossenMeasurementNoiseParameters")
+      .def(py::init<>())
+      .def_readwrite("enabled", &MeasurementNoiseParameters::enabled)
+      .def_readwrite("white_variances",
+                     &MeasurementNoiseParameters::white_variances)
+      .def_readwrite("colored_variances",
+                     &MeasurementNoiseParameters::colored_variances)
+      .def_readwrite("correlation_times",
+                     &MeasurementNoiseParameters::correlation_times)
+      .def_readwrite("sample_period",
+                     &MeasurementNoiseParameters::sample_period)
+      .def_readwrite("seed", &MeasurementNoiseParameters::seed)
+      .def_readwrite("stationary_initialization",
+                     &MeasurementNoiseParameters::stationary_initialization);
+
+  // ---- Diagnostics -------------------------------------------------------
+  py::class_<Diagnostics>(m, "FossenDiagnostics")
+      .def(py::init<>())
+      .def_readwrite("requested_wrench", &Diagnostics::requested_wrench)
+      .def_readwrite("allocated_wrench", &Diagnostics::allocated_wrench)
+      .def_readwrite("applied_wrench", &Diagnostics::applied_wrench)
+      .def_readwrite("allocation_residual", &Diagnostics::allocation_residual)
+      .def_readwrite("thrust_setpoints", &Diagnostics::thrust_setpoints)
+      .def_readwrite("saturated_thrusters", &Diagnostics::saturated_thrusters)
+      .def_readwrite("allocation_iterations",
+                     &Diagnostics::allocation_iterations)
+      .def_readwrite("allocation_converged",
+                     &Diagnostics::allocation_converged);
+
+  // ---- Measurement -------------------------------------------------------
+  py::class_<Measurement>(m, "FossenMeasurement")
+      .def(py::init<>())
+      .def_readwrite("pose", &Measurement::pose)
+      .def_readwrite("twist", &Measurement::twist)
+      .def_readwrite("sample_time", &Measurement::sample_time)
+      .def_readwrite("valid", &Measurement::valid);
 
   m.def(
       "fossen_step",
-      [](const Eigen::VectorXd &target_twist,
-         const State &state,
-         const Parameters &p) {
+      [](const Eigen::VectorXd& target_twist, const State& state,
+         const Parameters& p) {
         return bluerov2::step(target_twist, state, p);
       },
-      py::arg("target_twist"),
-      py::arg("state"),
-      py::arg("p") = Parameters());
+      py::arg("target_twist"), py::arg("state"), py::arg("p") = Parameters());
 
   // Stateless interface (motor lag must be disabled).
   m.def(
       "fossen_step_stateless",
-      [](const Eigen::VectorXd &target_twist,
-         const Eigen::Matrix4d &pose,
-         const Eigen::VectorXd &current_twist,
-         const Parameters &p) {
+      [](const Eigen::VectorXd& target_twist, const Eigen::Matrix4d& pose,
+         const Eigen::VectorXd& current_twist, const Parameters& p) {
         return bluerov2::step(target_twist, pose, current_twist, p);
       },
-      py::arg("target_twist"),
-      py::arg("pose"),
-      py::arg("current_twist"),
+      py::arg("target_twist"), py::arg("pose"), py::arg("current_twist"),
       py::arg("p") = Parameters());
 
   // Convenience overload: gains and dt supplied directly.
   m.def(
       "fossen_step_direct",
-      [](const Eigen::VectorXd &target_twist,
-         const Eigen::Matrix4d &pose,
-         const Eigen::VectorXd &current_twist,
-         const Eigen::VectorXd &velocity_gains,
-         double dt) {
-        return bluerov2::step(target_twist, pose, current_twist, velocity_gains, dt);
+      [](const Eigen::VectorXd& target_twist, const Eigen::Matrix4d& pose,
+         const Eigen::VectorXd& current_twist,
+         const Eigen::VectorXd& velocity_gains, double dt) {
+        return bluerov2::step(target_twist, pose, current_twist, velocity_gains,
+                              dt);
       },
-      py::arg("target_twist"),
-      py::arg("pose"),
-      py::arg("current_twist"),
-      py::arg("velocity_gains"),
-      py::arg("dt"));
+      py::arg("target_twist"), py::arg("pose"), py::arg("current_twist"),
+      py::arg("velocity_gains"), py::arg("dt"));
 }
