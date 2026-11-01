@@ -291,6 +291,41 @@ class RigidObject extends Objsim {
 					this.shape.add(group);
 				});
 			}
+            if (_3dobject.type === 'glb') {
+                loader = new GLTFLoader(manager);
+                loader.load(_3dobject.url, (root) => {
+                    const group = root.scene;
+                    group.scale.set(_3dobject.scale, _3dobject.scale, _3dobject.scale);
+                    group.applyMatrix4(_3dobject.matrix);
+
+                    if (_3dobject.mesh_material.type !== 'glb') {
+                        group.traverse(function (child) {
+                            if (child instanceof Mesh) {
+                                child.material = _3dobject.mesh_material;
+                        }
+                    });
+                    } else {
+                        const userOpacity = _3dobject.mesh_material?.opacity;
+                        if (userOpacity !== undefined && userOpacity < 1.0) {
+                            group.traverse((child) => {
+                                if (child instanceof Mesh && child.material) {
+                                    const mats = Array.isArray(child.material)
+                                        ? child.material : [child.material];
+                                    mats.forEach((mat) => {
+                                        if (mat) {
+                                            mat.opacity = userOpacity;
+                                            mat.transparent = true;
+                                            mat.needsUpdate = true;
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    }
+
+                    this.shape.add(group);
+                });
+            }
 		}
 
 	}
