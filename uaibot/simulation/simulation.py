@@ -1,3 +1,4 @@
+# Simulation.py
 try:
     # New versions
     from IPython.display import display, HTML
@@ -179,6 +180,15 @@ class Simulation:
         """Port of your local host serving the models."""
         return self._local_host_port
     
+    @property
+    def camera_poses(self) -> Optional[List[List[float]]]:
+        """A list of camera poses. Each pose is [time, px,py,pz, tx,ty,tz, zoom(optional)]."""
+        return self._camera_poses
+
+    @property
+    def camera_follow(self) -> Optional["SimObject"]:
+        """SimObject whose motion the camera should mimic. Overrides `camera_poses` when set."""
+        return self._camera_follow
     #######################################
     # Constructor
     #######################################
@@ -190,7 +200,10 @@ class Simulation:
                  load_screen_color: str ="#19bd39", background_color: str ="#F5F6FA",
                  camera_start_pose: Optional[List[float]] = None,
                  pixel_ratio : float = 0.9, anti_aliasing: bool = True,
-                 local_host_port: str = '') -> "Simulation":
+                 local_host_port: str = '',
+                 camera_poses: Optional[List[List[float]]] = None,
+                 camera_follow: Optional["SimObject"]  = None,
+                 ) -> "Simulation":
 
         if not Utils.is_a_number(ambient_light_intensity) or ambient_light_intensity < 0:
             raise Exception("The parameter 'ambient_light_intensity' should be a nonnegative float.")
@@ -223,11 +236,59 @@ class Simulation:
             raise Exception("The parameter 'local_host_port' must be a string.")
         
 
+        if camera_poses is not None:
+            if not isinstance(camera_poses, list):
+                raise Exception("The parameter 'camera_poses' should be either None or a list of poses.")
+            for pose in camera_poses:
+                if not isinstance(pose, (list, tuple)) or len(pose) not in (7, 8):
+                    raise Exception(
+                        "Each entry in 'camera_poses' must be a list of 7 or 8 elements: "
+                        "[time, px, py, pz, tx, ty, tz, zoom(optional)]."
+                    )
+                for v in pose:
+                    if not Utils.is_a_number(v):
+                        raise Exception("All elements of each camera pose must be numbers.")
+                if pose[0] < 0:
+                    raise Exception("The time in each camera pose must be nonnegative.")
+            # Store as mutable list-of-lists, sorted by time
+            camera_poses = [list(p) for p in sorted(camera_poses, key=lambda p: p[0])]
+
+        self._camera_poses = camera_poses
+
+        if camera_follow is not None:
+            if not Utils.is_a_obj_sim(camera_follow):
+                raise Exception("The parameter 'camera_follow' should be either None or a SimObject.")
+            if not hasattr(camera_follow, '_frames') or len(camera_follow._frames) == 0:
+                raise Exception(
+                    "The parameter 'camera_follow' should reference an object that has "
+                    "at least one animation frame (call 'add_ani_frame' on it first)."
+                )
+        self._camera_follow = camera_follow
+
         if camera_start_pose is None:
-            if camera_type=="perspective":
+            if camera_follow is not None:
+                # camera_follow controls the initial relative pose; do NOT derive
+                # camera_start_pose from camera_poses here (the user may have
+                # passed one but it will be overridden anyway).
+                if camera_type == "perspective":
+                    camera_start_pose = [1.76, 1.10, 1.45, 0, 0, 0, 1]
+                else:
+                    camera_start_pose = [1.3, 1.8, 2.7, 0, 0, 0, 4]
+            elif camera_poses is not None and len(camera_poses) > 0:
+                first = list(camera_poses[0][1:])
+                if len(first) == 6:
+                    first = first + [1]
+                camera_start_pose = first
+            elif camera_type == "perspective":
                 camera_start_pose = [1.76, 1.10, 1.45, 0, 0, 0, 1]
             else:
                 camera_start_pose = [1.3, 1.8, 2.7, 0, 0, 0, 4]
+
+        # if camera_start_pose is None:
+        #     if camera_type=="perspective":
+        #         camera_start_pose = [1.76, 1.10, 1.45, 0, 0, 0, 1]
+        #     else:
+        #         camera_start_pose = [1.3, 1.8, 2.7, 0, 0, 0, 4]
 
         if not Utils.is_a_vector(camera_start_pose,7):
             raise Exception("The parameter 'camera_start_pose' should be either None or a 7 element vector.")
@@ -293,6 +354,30 @@ class Simulation:
     # Methods
     #######################################
 
+    @staticmethod
+    def _lookat_htm(cam_pos, target, up=np.array([0.0, 0.0, 1.0])):
+        """HTM of a camera at cam_pos looking at target (OpenGL: local -z points toward target)."""
+        cam_pos = np.asarray(cam_pos, dtype=float)
+        target  = np.asarray(target,  dtype=float)
+        up      = np.asarray(up,      dtype=float)
+
+        z = cam_pos - target
+        n = np.linalg.norm(z)
+        if n < 1e-10:
+            raise Exception("camera_follow: camera position coincides with the followed object's origin.")
+        z /= n
+
+        x = np.cross(up, z)
+        if np.linalg.norm(x) < 1e-8:
+            up = np.array([1.0, 0.0, 0.0])
+            x  = np.cross(up, z)
+        x /= np.linalg.norm(x)
+        y = np.cross(z, x)
+
+        htm = np.eye(4)
+        htm[:3, :3] = np.column_stack([x, y, z])
+        htm[:3,  3] = cam_pos
+        return htm
     @staticmethod
     def create_sim_factory(objects: List["SimObject"] =[], light_intensity: float = 1.0) -> "Simulation":
         """
@@ -729,7 +814,10 @@ class Simulation:
                  show_grid: Optional[bool] = None, load_screen_color: Optional[str] = None, 
                  background_color: Optional[str] = None, camera_start_pose: Optional[List[float]] = None,
                  pixel_ratio : Optional[float] = None, anti_aliasing: Optional[bool] = None, 
-                 local_host_port: Optional[str] = None) -> None:
+                 local_host_port: Optional[str] = None,
+                 camera_poses: Optional[List[List[float]]] = None,
+                 camera_follow: Optional["SimObject"] = None,
+                    ) -> None:
         """
       Change the simulation parameters.
 
@@ -889,6 +977,28 @@ class Simulation:
         if not local_host_port is None: 
             self._local_host_port = local_host_port
 
+        if not (camera_poses is None):
+            if not isinstance(camera_poses, list):
+                raise Exception("The parameter 'camera_poses' should be either None or a list of poses.")
+            for pose in camera_poses:
+                if not isinstance(pose, (list, tuple)) or len(pose) not in (7, 8):
+                    raise Exception("Each entry in 'camera_poses' must have 7 or 8 numbers.")
+                if not all(Utils.is_a_number(v) for v in pose):
+                    raise Exception("All elements of each camera pose must be numbers.")
+                if pose[0] < 0:
+                    raise Exception("The time in each camera pose must be nonnegative.")
+            self._camera_poses = [list(p) for p in sorted(camera_poses, key=lambda p: p[0])]
+
+        if not (camera_follow is None):
+            if not Utils.is_a_obj_sim(camera_follow):
+                raise Exception("The parameter 'camera_follow' should be either None or a SimObject.")
+            if not hasattr(camera_follow, '_frames') or len(camera_follow._frames) == 0:
+                raise Exception(
+                    "The parameter 'camera_follow' should reference an object that has "
+                    "at least one animation frame."
+                )
+            self._camera_follow = camera_follow
+
 
         
     def gen_code(self):
@@ -1030,6 +1140,61 @@ class Simulation:
             code = obj.gen_code(port = self.local_host_port)
             string = re.sub("//USER INPUT GOES HERE", code, string)
             max_time = max(max_time, obj._max_time)
+
+        # --- Camera animation injection ---------------------------------------
+        # --- camera_follow: inspect the followed object's frames and rebuild camera_poses ---
+        if self._camera_follow is not None:
+            follow = self._camera_follow
+            htms  = []
+            times = []
+            for f in follow._frames:
+                m = np.array([
+                    [float(f[1]), -float(f[3]),  float(f[2]),  float(f[4]) ],
+                    [float(f[5]), -float(f[7]),  float(f[6]),  float(f[8]) ],
+                    [float(f[9]), -float(f[11]), float(f[10]), float(f[12])],
+                    [0.0,          0.0,           0.0,           1.0         ],
+                ], dtype=float)
+                htms.append(m)
+                times.append(float(f[0]))
+
+            # Initial camera position / zoom: taken from camera_start_pose
+            cam_pos_0 = np.array(self._camera_start_pose[:3], dtype=float)
+            zoom_0    = float(self._camera_start_pose[6])
+
+            # Look exactly at the followed object's origin at t=0
+            target_0  = htms[0][:3, 3]
+            cam_htm_0 = Simulation._lookat_htm(cam_pos_0, target_0)
+
+            # CONSTANT relative pose from the object's frame
+            M_rel = np.linalg.inv(htms[0]) @ cam_htm_0
+
+            # Rebuild camera_poses (overrides any user-supplied list, per spec)
+            self._camera_poses = []
+            for i, bhtm in enumerate(htms):
+                chtm = bhtm @ M_rel
+                cx, cy, cz = chtm[:3, 3]
+                tx, ty, tz = bhtm[:3, 3]
+                self._camera_poses.append([
+                    times[i],
+                    float(cx), float(cy), float(cz),
+                    float(tx), float(ty), float(tz),
+                    zoom_0,
+                ])
+        if self._camera_poses is not None and len(self._camera_poses) > 0:
+            frames_lines = [
+                "    [" + ",".join(repr(float(v)) for v in pose) + "]"
+                for pose in self._camera_poses
+            ]
+            frames_js = "[\n" + ",\n".join(frames_lines) + "\n]"
+            camera_code = (
+                "sceneElements.push(new CameraSim(" + frames_js + ", camera, controls));\n"
+            )
+            string = string.replace("//USER CAMERA GOES HERE", camera_code)
+            for pose in self._camera_poses:
+                max_time = max(max_time, pose[0])
+        else:
+            string = string.replace("//USER CAMERA GOES HERE", "")
+        # ----------------------------------------------------------------------
 
         sim_id = str(time.time()).replace(".","")
 

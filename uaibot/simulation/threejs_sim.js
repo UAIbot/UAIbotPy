@@ -1,3 +1,4 @@
+// threejs_sim.js
 import {
 	Object3D, Vector3, BoxBufferGeometry, Color, Mesh, MeshBasicMaterial, PerspectiveCamera, OrthographicCamera,
 	Scene, WebGLRenderer, AmbientLight, DirectionalLight, HemisphereLight, MeshStandardMaterial,
@@ -736,7 +737,56 @@ class Curve extends Objsim {
     setEnvMap(envMap) { }
 }
 //------------------------------------------------------------
+class CameraSim extends Objsim {
+    // _frames: [[t0, px,py,pz, tx,ty,tz, zoom?], [t1, ...], ...]
+    constructor(_frames, _camera, _controls) {
+        super(_frames);
+        this.camera = _camera;
+        this.controls = _controls;
+        this.shape = undefined; // do not add to scene graph
+    }
 
+    hasLoaded() { return true; }
+    setEnvMap(envMap) { /* nothing to do */ }
+
+    showFrame() {
+        const n = this.frames.length;
+        if (n === 0) return;
+
+        const i0 = Math.min(this.currentFrame, n - 1);
+        const i1 = Math.min(i0 + 1, n - 1);
+        const f0 = this.frames[i0];
+        const f1 = this.frames[i1];
+
+        // Interpolate for a smooth trajectory (unlike objects, camera steps look bad)
+        const t = automaticPlay
+            ? 0.001 * Math.max(elapsedMs() - startMs - delay, 0)
+            : manualTime;
+
+        let a = 0;
+        if (f1[0] > f0[0]) {
+            a = (t - f0[0]) / (f1[0] - f0[0]);
+            a = Math.max(0, Math.min(1, a));
+        }
+
+        const px = f0[1] + a * (f1[1] - f0[1]);
+        const py = f0[2] + a * (f1[2] - f0[2]);
+        const pz = f0[3] + a * (f1[3] - f0[3]);
+        const tx = f0[4] + a * (f1[4] - f0[4]);
+        const ty = f0[5] + a * (f1[5] - f0[5]);
+        const tz = f0[6] + a * (f1[6] - f0[6]);
+        const z0 = (f0[7] !== undefined) ? f0[7] : 1;
+        const z1 = (f1[7] !== undefined) ? f1[7] : z0;
+        const zoom = z0 + a * (z1 - z0);
+
+        this.camera.position.set(px, py, pz);
+        this.controls.target.set(tx, ty, tz);
+        this.camera.zoom = zoom;
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(tx, ty, tz);
+        this.controls.update();
+    }
+}
 //--------------- BASIC ELEMENTS OF ANY SCENE ----------------
 
 Object3D.DefaultUp = new Vector3(0, 0, 1); //Pointing Z axis up
@@ -796,6 +846,8 @@ if (showGrid) {
 
 //--------------- ADDING ELEMENTS TO THIS SCENE ---------------
 //USER INPUT GOES HERE
+
+//USER CAMERA GOES HERE
 
 
 
