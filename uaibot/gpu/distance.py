@@ -124,7 +124,13 @@ def holder_distance(
 
 
 def holder_distance_objects(
-    objects_a, objects_b=None, gamma=2.0, eps=1e-3, device=None
+    objects_a,
+    objects_b=None,
+    htms_a=None,
+    htms_b=None,
+    gamma=2.0,
+    eps=1e-3,
+    device=None,
 ):
     """Compute the Hölder distance between two heterogeneous sets of objects.
 
@@ -134,6 +140,10 @@ def holder_distance_objects(
         First collection of objects.
     objects_b : sequence of Box or ConvexPolytope, optional
         Second collection. If None, objects_a is used for both sides.
+    htms_a: list
+        Custom HTMs for each object in objects_a.
+    htms_b: list
+        Custom HTMs for each object in objects_b.
     gamma : float
         Hölder distance parameter.
     eps : float
@@ -149,14 +159,20 @@ def holder_distance_objects(
     if objects_b is None:
         objects_b = objects_a
 
+    if htms_a is None:
+        htms_a = [obj.htm for obj in objects_a]
+
+    if htms_b is None:
+        htms_b = [obj.htm for obj in objects_b]
+
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Extract components for all objects
-    comp_a = [extract_VEF(obj) for obj in objects_a]
-    comp_b = [extract_VEF(obj) for obj in objects_b]
+    comp_a = [extract_VEF(obj, htms_a[i]) for i, obj in enumerate(objects_a)]
+    comp_b = [extract_VEF(obj, htms_b[i]) for i, obj in enumerate(objects_b)]
 
-    # Group indices by component signature (V, E, F)
+    # Group by signature
     def group_indices(components):
         groups = defaultdict(list)
         for i, (v, e, n) in enumerate(components):
