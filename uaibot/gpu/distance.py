@@ -13,6 +13,7 @@ from uaibot.gpu.functional import (
 from collections import defaultdict
 from uaibot.gpu.geometry import extract_VEF
 
+_DEFAULT_DTYPE = torch.float32
 # -------------------------------------------------------------------- #
 #                            DISTANCE ONLY
 # -------------------------------------------------------------------- #
@@ -131,6 +132,7 @@ def holder_distance_objects(
     gamma=2.0,
     eps=1e-3,
     device=None,
+    local_cache=None,
 ):
     """Compute the Hölder distance between two heterogeneous sets of objects.
 
@@ -169,8 +171,15 @@ def holder_distance_objects(
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Extract components for all objects
-    comp_a = [extract_VEF(obj, htms_a[i]) for i, obj in enumerate(objects_a)]
-    comp_b = [extract_VEF(obj, htms_b[i]) for i, obj in enumerate(objects_b)]
+    comp_a = [
+        extract_VEF(obj, htms_a[i], device=device, local_cache=local_cache)
+        for i, obj in enumerate(objects_a)
+    ]
+    ref_dtype = comp_a[0][0].dtype if comp_a else _DEFAULT_DTYPE
+    comp_b = [
+        extract_VEF(obj, htms_b[i], device=device, local_cache=local_cache, dtype=ref_dtype)
+        for i, obj in enumerate(objects_b)
+    ]
 
     # Group by signature
     def group_indices(components):
@@ -184,8 +193,9 @@ def holder_distance_objects(
     groups_b = group_indices(comp_b)
 
     # Initialize output matrix
+    ref_v = comp_a[0][0] if comp_a else comp_b[0][0]
     dist = torch.empty(
-        (len(objects_a), len(objects_b)), dtype=torch.float32, device=device
+        (len(objects_a), len(objects_b)), dtype=ref_v.dtype, device=device
     )
 
     # For every pair of homogeneous groups, compute a block
@@ -278,10 +288,10 @@ def holder_distance_with_grad(
     loss = dist.sum() if reduce_fn is None else reduce_fn(dist)
     loss.backward()
 
-    return dist.detach().float(), pnv_leaf.grad.float()
+    return dist.detach(), pnv_leaf.grad
 
 
-def se3_generators():
+def se3_generators(dtype=_DEFAULT_DTYPE, device=None):
     """Return the six 4x4 SE(3) Lie algebra generators.
 
     Shape: (6, 4, 4). The ordering is:
@@ -292,7 +302,7 @@ def se3_generators():
       S[4] = rotation about y-axis   (angular velocity ω_y)
       S[5] = rotation about z-axis   (angular velocity ω_z)
     """
-    S = torch.zeros(6, 4, 4)
+    S = torch.zeros(6, 4, 4, dtype=dtype, device=device)
     # Translation generators
     S[0, 0, 3] = 1.0  # x translation
     S[1, 1, 3] = 1.0  # y translation
@@ -333,7 +343,7 @@ def pnv_grad_SE3(normals_A, vertices_A, normals_B, vertices_B, S=None):
         SE(3) Lie algebra generators. If None, uses the default basis.
 
     Returns
-    -------
+    ------
     dict of torch.Tensor:
         'nA_grad_HA': shape (N_A, V_A, V_B, 6)
             Gradient of pnv w.r.t. pose A for normals from A.
@@ -344,8 +354,20 @@ def pnv_grad_SE3(normals_A, vertices_A, normals_B, vertices_B, S=None):
         'nB_grad_HB': shape (N_B, V_A, V_B, 6)
             Gradient of pnv w.r.t. pose B for normals from B.
     """
+    # Promote all inputs to a common dtype (highest precision wins).
+    # Critical: obstacle tensors can arrive as float32 while the UAV is
+    # float64 (see get_aclecian's autograd path).
+    common_dtype = torch.promote_types(normals_A.dtype, normals_B.dtype)
+    common_dtype = torch.promote_types(common_dtype, vertices_A.dtype)
+    common_dtype = torch.promote_types(common_dtype, vertices_B.dtype)
+
+    normals_A = normals_A.to(common_dtype)
+    normals_B = normals_B.to(common_dtype)
+    vertices_A = vertices_A.to(common_dtype)
+    vertices_B = vertices_B.to(common_dtype)
+
     if S is None:
-        S = se3_generators().to(normals_A.device)
+        S = se3_generators(dtype=common_dtype, device=normals_A.device)
 
     # Convert to homogeneous coordinates
     # (F_A,4)
@@ -361,6 +383,7 @@ def pnv_grad_SE3(normals_A, vertices_A, normals_B, vertices_B, S=None):
     NB, VB = nB_h.shape[0], vB_h.shape[0]
 
     # n_a^T S_g v_b  -> (NA, VB, 6)
+    S = S.to(dtype=nA_h.dtype, device=nA_h.device)
     prod_nA_S_vB = torch.einsum("fi,gij,vj->fvg", nA_h, S, vB_h)
     # n_b^T S_g v_a  -> (NB, VA, 6)
     prod_nB_S_vA = torch.einsum("fi,gij,vj->fvg", nB_h, S, vA_h)
@@ -387,6 +410,7 @@ def holder_distance_objects_with_grad(
     eps=1e-3,
     device=None,
     reduce_fn=None,
+    local_cache=None,
 ):
     """
     Compute Hölder distances and pose gradients for heterogeneous object sets.
@@ -438,8 +462,16 @@ def holder_distance_objects_with_grad(
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Extract components (vertices, edges, face normals)
-    comp_a = [extract_VEF(obj, htms_a[i]) for i, obj in enumerate(objects_a)]
-    comp_b = [extract_VEF(obj, htms_b[i]) for i, obj in enumerate(objects_b)]
+    comp_a = [
+        extract_VEF(obj, htms_a[i], device=device, local_cache=local_cache)
+        for i, obj in enumerate(objects_a)
+    ]
+    ref_dtype = comp_a[0][0].dtype if comp_a else _DEFAULT_DTYPE
+
+    comp_b = [
+        extract_VEF(obj, htms_b[i], device=device, local_cache=local_cache, dtype=ref_dtype)
+        for i, obj in enumerate(objects_b)
+    ]
 
     # Group by signature
     def group_indices(components):
@@ -454,9 +486,10 @@ def holder_distance_objects_with_grad(
 
     N_A = len(objects_a)
     N_B = len(objects_b)
-    dist = torch.empty((N_A, N_B), dtype=torch.float32, device=device)
-    grad_HA = torch.zeros(N_A, 6, dtype=torch.float32, device=device)
-    grad_HB = torch.zeros(N_B, 6, dtype=torch.float32, device=device)
+    ref_v = comp_a[0][0] if comp_a else comp_b[0][0]
+    dist = torch.empty((N_A, N_B), dtype=ref_v.dtype, device=device)
+    grad_HA = torch.zeros(N_A, 6, dtype=ref_v.dtype, device=device)
+    grad_HB = torch.zeros(N_B, 6, dtype=ref_v.dtype, device=device)
 
     for sig_a, idx_a in groups_a.items():
         # Stack geometry for the whole group
@@ -518,8 +551,12 @@ def holder_distance_objects_with_grad(
                     pos_nB_grad_HB = pnv_grads["nB_grad_HB"]
 
                     # Build full gradient tensors for this pair w.r.t. H_A and H_B
-                    pair_grad_HA = torch.zeros(D, V_A, V_B, 6, device=device)
-                    pair_grad_HB = torch.zeros(D, V_A, V_B, 6, device=device)
+                    pair_grad_HA = torch.zeros(
+                        D, V_A, V_B, 6, device=device, dtype=ref_v.dtype
+                    )
+                    pair_grad_HB = torch.zeros(
+                        D, V_A, V_B, 6, device=device, dtype=ref_v.dtype
+                    )
 
                     # Positive edges of A
                     pair_grad_HA[:E_A] = pos_nA_grad_HA[:E_A]

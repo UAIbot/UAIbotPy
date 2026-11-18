@@ -3,252 +3,278 @@ import numpy as np
 from scipy.spatial import HalfspaceIntersection
 from uaibot.simobjects import Box, ConvexPolytope
 
-
-def extract_VEF(obj, htm=None):
-    """Extract vertices, edge directions, and face normals from a
-    supported object.
-
-    Parameters
-    ----------
-    obj : Box or ConvexPolytope
-        UAIbotPy object with a homogeneous transform.
-    htm : np.ndarray (4,4)
-        Homogeneous transformation matrix (world frame).
-
-    Returns
-    -------
-    tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-        Vertices, edge direction vectors, and face normals.
-    """
-    if htm is None:
-        htm = obj.htm
-    if isinstance(obj, Box):
-        return get_VEF_from_box(htm, obj.width, obj.depth, obj.height)
-    elif isinstance(obj, ConvexPolytope):
-        return get_VEF_from_polytope(
-            np.array(htm), np.array(obj.A_local), np.array(obj.b_local).ravel()
-        )
-    else:
-        raise TypeError(f"Unsupported object type for GPU distance: {type(obj)}")
+# Default only when htm is numpy (so we don't inherit float32 by accident).
+_DEFAULT_DTYPE = torch.float32
 
 
-def get_VEF_from_polytope(htm, A, b, rtol=1e-8):
-    """Extract vertices, true edge directions, and face normals from a
-    convex polyhedron defined by halfspaces ``A x <= b``.
+def _resolve_device_dtype(htm, device=None, dtype=None):
+    if device is None:
+        if isinstance(htm, torch.Tensor):
+            device = htm.device
+        else:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    Parameters
-    ----------
-    htm : np.ndarray (4,4)
-        Homogeneous transformation matrix (world frame).
-    A : np.ndarray (F,3)
-        Outward unit normals in local frame.
-    b : np.ndarray (F,)
-        Face offsets (distance from origin to plane) in local frame.
-    rtol : float, optional
-        Tolerance for considering a vertex to lie on a face plane.
-        Default is 1e-8.
+    if dtype is None:
+        if isinstance(htm, torch.Tensor):
+            dtype = htm.dtype
+        else:
+            dtype = _DEFAULT_DTYPE
 
-    Returns
-    -------
-    vertices : torch.Tensor (V, 3)
-        Vertices in world frame.
-    edges : torch.Tensor (E, 3)
-        Unit direction vectors of each undirected edge in world frame.
-    normals : torch.Tensor (F, 3)
-        Outward unit normals of each face in world frame.
-    """
+    return torch.device(device), dtype
 
-    # 1. Local vertices from half‑space intersection
-    halfspaces = np.hstack([A, -b.reshape(-1, 1)])
+
+def _to_torch(x, device, dtype):
+    if isinstance(x, torch.Tensor):
+        return x.to(device=device, dtype=dtype)
+
+    return torch.as_tensor(
+        x,
+        device=device,
+        dtype=dtype,
+    )
+
+
+def _to_numpy_cpu(x):
+    if isinstance(x, torch.Tensor):
+        return x.detach().cpu().numpy()
+
+    return np.asarray(x)
+
+
+# --------------------------------------------------------------------------
+# Cacheable local-frame geometry (numpy only — HalfspaceIntersection is not
+# differentiable and does not depend on htm, only on A, b)
+# --------------------------------------------------------------------------
+
+
+def _local_geometry_polytope(A_np, b_np, rtol=1e-8):
+    halfspaces = np.hstack([A_np, -b_np.reshape(-1, 1)])
     hs = HalfspaceIntersection(halfspaces, np.zeros(3))
-    local_verts = hs.intersections
-    local_verts = np.unique(local_verts.round(decimals=10), axis=0)
+    local_verts = np.unique(hs.intersections.round(decimals=10), axis=0)
 
-    nv = local_verts.shape[0]
-    nf = A.shape[0]
+    nv, nf = local_verts.shape[0], A_np.shape[0]
 
-    # 2. Find true edges: pairs of vertices that share at least two face planes
     edge_indices = []
     for i in range(nv):
         vi = local_verts[i]
         for j in range(i + 1, nv):
             vj = local_verts[j]
-
-            common_faces = 0
+            common = 0
             for k in range(nf):
-                ni = A[k]
-                di = b[k]
-                on_i = abs(np.dot(ni, vi) - di) <= rtol
-                on_j = abs(np.dot(ni, vj) - di) <= rtol
+                on_i = abs(np.dot(A_np[k], vi) - b_np[k]) <= rtol
+                on_j = abs(np.dot(A_np[k], vj) - b_np[k]) <= rtol
                 if on_i and on_j:
-                    common_faces += 1
-
-            if common_faces >= 2:
+                    common += 1
+            if common >= 2:
                 edge_indices.append((i, j))
 
-    # 3. Compute unit direction vectors in local frame
     local_edges = []
     for i, j in edge_indices:
         vec = local_verts[j] - local_verts[i]
-        norm = np.linalg.norm(vec)
-        if norm > rtol:
-            vec /= norm
-            local_edges.append(vec)
+        n = np.linalg.norm(vec)
+        if n > rtol:
+            local_edges.append(vec / n)
+    local_edges = np.array(local_edges) if local_edges else np.empty((0, 3))
 
-    local_edges = np.array(local_edges)  # (E, 3) or (0,3) if none
-    if local_edges.size == 0:
-        local_edges = np.empty((0, 3), dtype=np.float32)
-    else:
-        local_edges = local_edges.astype(np.float32)
-
-    # 4. Transform to world frame
-    R = htm[:3, :3]
-    t = htm[:3, 3]
-
-    world_vertices = (R @ local_verts.T).T + t
-    world_edges = (R @ local_edges.T).T if local_edges.shape[0] > 0 else local_edges
-    world_normals = (R @ A.T).T
-
-    # 5. Return float32 tensors
-    return (
-        torch.tensor(world_vertices, dtype=torch.float32),
-        torch.tensor(world_edges, dtype=torch.float32),
-        torch.tensor(world_normals, dtype=torch.float32),
-    )
+    return local_verts, local_edges, A_np
 
 
-def get_VEF_from_platonic(htm, A, b, rtol=1e-5):
-    """Extract vertices, true edge directions, and face normals from a
-    platonic solid (tetrahedron, cube, octahedron, dodecahedron,
-                    icosahedron)
-
-    Parameters
-    ----------
-    htm : np.ndarray (4,4)
-        Homogeneous transformation matrix (world frame).
-    A : np.ndarray (F,3)
-        Outward unit normals in local frame.
-    b : np.ndarray (F,)
-        Face offsets (distance from origin to plane) in local frame.
-    rtol : float
-        Relative tolerance for edge‑length equality.
-
-    Returns
-    -------
-    vertices : torch.Tensor (V, 3)
-        Vertices in world frame.
-    edges : torch.Tensor (E, 3)
-        Unit direction vectors of each undirected edge in world frame.
-    normals : torch.Tensor (F, 3)
-        Outward unit normals of each face in world frame.
-    """
-    # 1. Local vertices from half‑space intersection
-    halfspaces = np.hstack([A, -b.reshape(-1, 1)])
+def _local_geometry_platonic(A_np, b_np, rtol=1e-5):
+    halfspaces = np.hstack([A_np, -b_np.reshape(-1, 1)])
     hs = HalfspaceIntersection(halfspaces, np.zeros(3))
-    local_verts = hs.intersections  # (V, 3)
-    local_verts = np.unique(local_verts.round(decimals=10), axis=0)
+    local_verts = np.unique(hs.intersections.round(decimals=10), axis=0)
 
-    # 2. Find true edges by minimal positive distance (like C++ logic)
     nv = local_verts.shape[0]
-    # all pairwise squared distances
-    diff = local_verts[:, None, :] - local_verts[None, :, :]  # (V, V, 3)
-    sq_dist = np.sum(diff * diff, axis=-1)  # (V, V)
-
-    # Ignore zero (self) and find minimal positive squared length
+    diff = local_verts[:, None, :] - local_verts[None, :, :]
+    sq_dist = np.sum(diff * diff, axis=-1)
     mask = sq_dist > 1e-12
     if not mask.any():
         raise ValueError("No edges found – degenerate vertices?")
     edge_len_sq = np.min(sq_dist[mask])
     tol = edge_len_sq * rtol
 
-    # Select all unordered pairs with that length
     edge_set = set()
     for i in range(nv):
         for j in range(i + 1, nv):
             if abs(sq_dist[i, j] - edge_len_sq) < tol:
                 edge_set.add((i, j))
 
-    edges_idx = np.array(list(edge_set))  # (E, 2)
-    # Edge direction vectors (unit) – shape (E, 3)
+    edges_idx = np.array(sorted(edge_set))
     edge_vectors = local_verts[edges_idx[:, 1]] - local_verts[edges_idx[:, 0]]
     edge_vectors /= np.linalg.norm(edge_vectors, axis=1, keepdims=True)
-    local_edges = edge_vectors
 
-    # 3. Face normals are already unit – shape (F, 3)
-    local_normals = A
+    return local_verts, edge_vectors, A_np
 
-    # 4. Transform to world frame
-    R = htm[:3, :3]
-    t = htm[:3, 3]
-    world_vertices = (R @ local_verts.T).T + t  # (V, 3)
-    world_edges = (R @ local_edges.T).T  # (E, 3)
-    world_normals = (R @ local_normals.T).T  # (F, 3)
 
-    # 5. Return float32 tensors
+def _cache_key(kind, A_np, b_np, rtol):
+    A_np = np.ascontiguousarray(A_np)
+    b_np = np.ascontiguousarray(b_np)
+
     return (
-        torch.tensor(world_vertices, dtype=torch.float32),
-        torch.tensor(world_edges, dtype=torch.float32),
-        torch.tensor(world_normals, dtype=torch.float32),
+        kind,
+        A_np.shape,
+        A_np.dtype.str,
+        A_np.tobytes(),
+        b_np.shape,
+        b_np.dtype.str,
+        b_np.tobytes(),
+        float(rtol),
     )
 
 
-def get_VEF_from_box(htm, lx, ly, lz):
-    """Extract vertices, true edge directions, and face normals from a
-    box.
+# --------------------------------------------------------------------------
+# Public API: world-frame VEF from htm (differentiable w.r.t. htm)
+# --------------------------------------------------------------------------
+
+
+def get_VEF_from_polytope(
+    htm, A, b, rtol=1e-8, device=None, dtype=None, local_cache=None
+):
+    device, dtype = _resolve_device_dtype(htm, device, dtype)
+    A_np = _to_numpy_cpu(A)
+    b_np = _to_numpy_cpu(b).ravel()
+
+    if local_cache is not None:
+        key = _cache_key("polytope", A_np, b_np, rtol)
+        if key not in local_cache:
+            local_cache[key] = _local_geometry_polytope(A_np, b_np, rtol)
+        local_verts, local_edges, local_normals = local_cache[key]
+    else:
+        local_verts, local_edges, local_normals = _local_geometry_polytope(
+            A_np, b_np, rtol
+        )
+
+    htm_t = _to_torch(htm, device, dtype)
+    R = htm_t[:3, :3]
+    t = htm_t[:3, 3]
+
+    verts = torch.as_tensor(local_verts, device=device, dtype=dtype)
+    edges = torch.as_tensor(local_edges, device=device, dtype=dtype)
+    normals = torch.as_tensor(local_normals, device=device, dtype=dtype)
+
+    # Differentiable in htm: `const @ R.T + t` keeps the graph through R, t.
+    return verts @ R.T + t, edges @ R.T, normals @ R.T
+
+
+def get_VEF_from_platonic(
+    htm, A, b, rtol=1e-5, device=None, dtype=None, local_cache=None
+):
+    device, dtype = _resolve_device_dtype(htm, device, dtype)
+    A_np = _to_numpy_cpu(A)
+    b_np = _to_numpy_cpu(b).ravel()
+
+    if local_cache is not None:
+        key = _cache_key("platonic", A_np, b_np, rtol)
+        if key not in local_cache:
+            local_cache[key] = _local_geometry_platonic(A_np, b_np, rtol)
+        local_verts, local_edges, local_normals = local_cache[key]
+    else:
+        local_verts, local_edges, local_normals = _local_geometry_platonic(
+            A_np, b_np, rtol
+        )
+
+    htm_t = _to_torch(htm, device, dtype)
+    R = htm_t[:3, :3]
+    t = htm_t[:3, 3]
+
+    verts = torch.as_tensor(local_verts, device=device, dtype=dtype)
+    edges = torch.as_tensor(local_edges, device=device, dtype=dtype)
+    normals = torch.as_tensor(local_normals, device=device, dtype=dtype)
+
+    return verts @ R.T + t, edges @ R.T, normals @ R.T
+
+
+def get_VEF_from_box(
+    htm,
+    lx,
+    ly,
+    lz,
+    device=None,
+    dtype=None,
+):
+    device, dtype = _resolve_device_dtype(htm, device, dtype)
+
+    htm = _to_torch(htm, device, dtype)
+
+    x = htm[:3, 0].reshape(3, 1)
+    y = htm[:3, 1].reshape(3, 1)
+    z = htm[:3, 2].reshape(3, 1)
+    s = htm[:3, 3].reshape(3, 1)
+
+    # ----------------------------------------------------------
+    # Vertices: exactly the original ordering
+    # ----------------------------------------------------------
+    vertices = torch.cat(
+        [
+            s + 0.5 * lx * x + 0.5 * ly * y + 0.5 * lz * z,
+            s + 0.5 * lx * x + 0.5 * ly * y - 0.5 * lz * z,
+            s + 0.5 * lx * x - 0.5 * ly * y + 0.5 * lz * z,
+            s + 0.5 * lx * x - 0.5 * ly * y - 0.5 * lz * z,
+            s - 0.5 * lx * x + 0.5 * ly * y + 0.5 * lz * z,
+            s - 0.5 * lx * x + 0.5 * ly * y - 0.5 * lz * z,
+            s - 0.5 * lx * x - 0.5 * ly * y + 0.5 * lz * z,
+            s - 0.5 * lx * x - 0.5 * ly * y - 0.5 * lz * z,
+        ],
+        dim=1,
+    ).T.contiguous()
+
+    # ----------------------------------------------------------
+    # Edges: 4 parallel edges per axis
+    # ----------------------------------------------------------
+    edges = torch.cat(
+        [x, x, x, x, y, y, y, y, z, z, z, z],
+        dim=1,
+    ).T.contiguous()
+
+    # ----------------------------------------------------------
+    # Face normals: ±x, ±y, ±z
+    # ----------------------------------------------------------
+    normals = torch.cat(
+        [x, -x, y, -y, z, -z],
+        dim=1,
+    ).T.contiguous()
+
+    return vertices, edges, normals
+
+
+def extract_VEF(obj, htm=None, device=None, dtype=None, local_cache=None):
+    """World-frame VEF: differentiable w.r.t. ``htm``; supports CUDA/numpy.
 
     Parameters
     ----------
-    htm : np.ndarray (4,4)
-        Homogeneous transformation matrix (world frame).
-    lx : float
-        Width of the box in meters
-    ly : float
-        depth of the box in meters
-    lz : float
-        height of the box in meters
-
-    Returns
-    -------
-    vertices : torch.Tensor (8, 3)
-        Vertices in world frame.
-    edges : torch.Tensor (12, 3)
-        Unit direction vectors of each undirected edge in world frame.
-    normals : torch.Tensor (6, 3)
-        Outward unit normals of each face in world frame.
+    htm : torch.Tensor (4, 4) or numpy (4, 4), optional
+        Falls back to ``obj.htm`` when omitted.
+    device, dtype : optional overrides
+        Defaults to ``htm.device`` / ``htm.dtype`` if ``htm`` is a tensor,
+        else CUDA-if-available / float64.
+    local_cache : dict, optional
+        If supplied, memoises the local-frame HalfspaceIntersection result
+        per ``(A_local, b_local, rtol)``. Pass the same dict across calls
+        to skip recomputation when only ``htm`` varies (critical for the
+        autograd-Hessian path).
     """
+    if htm is None:
+        htm = obj.htm
 
-    htm = np.array(htm)
-    x = htm[0:3, 0].reshape(3, 1)
-    y = htm[0:3, 1].reshape(3, 1)
-    z = htm[0:3, 2].reshape(3, 1)
-    s = htm[0:3, 3].reshape(3, 1)
+    if isinstance(obj, Box):
+        return get_VEF_from_box(
+            htm,
+            obj.width,
+            obj.depth,
+            obj.height,
+            device=device,
+            dtype=dtype,
+        )
 
-    vertices = torch.tensor(
-        np.hstack(
-            [
-                s + 0.5 * lx * x + 0.5 * ly * y + 0.5 * lz * z,
-                s + 0.5 * lx * x + 0.5 * ly * y - 0.5 * lz * z,
-                s + 0.5 * lx * x - 0.5 * ly * y + 0.5 * lz * z,
-                s + 0.5 * lx * x - 0.5 * ly * y - 0.5 * lz * z,
-                s - 0.5 * lx * x + 0.5 * ly * y + 0.5 * lz * z,
-                s - 0.5 * lx * x + 0.5 * ly * y - 0.5 * lz * z,
-                s - 0.5 * lx * x - 0.5 * ly * y + 0.5 * lz * z,
-                s - 0.5 * lx * x - 0.5 * ly * y - 0.5 * lz * z,
-            ]
-        ),
-        dtype=torch.float32,
-    ).T.contiguous()  # (8, 3) after tranpose
+    elif isinstance(obj, ConvexPolytope):
+        return get_VEF_from_polytope(
+            htm,
+            obj.A_local,
+            obj.b_local,
+            device=device,
+            dtype=dtype,
+            local_cache=local_cache,
+        )
 
-    # Edge direction vectors – one per unique undirected edge line,
-    # keeping the C++ Box convention: 6 oriented unit vectors (±X,±Y,±Z)
-    edges = torch.tensor(
-        np.hstack([x, x, x, x, y, y, y, y, z, z, z, z]), dtype=torch.float32
-    ).T.contiguous()  # shape (12,3) after transpose
-
-    # Face normals: ±x, ±y, ±z (unit length)
-    normals = torch.tensor(
-        np.hstack([x, -x, y, -y, z, -z]), dtype=torch.float32
-    ).T.contiguous()  # shape (6,3) after tranpose
-
-    # Normals and edges are already unit vectors
-    return vertices, edges, normals
+    else:
+        raise TypeError(f"Unsupported object type for GPU distance: {type(obj)}")
