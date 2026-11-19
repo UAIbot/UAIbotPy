@@ -1,4 +1,5 @@
 #pragma once
+#include "dynamics.hpp"
 // BlueROV2 Heavy: Fossen dynamics, INERTIAL twist interface, homogeneous pose.
 // C++17, Eigen >= 3.3. No ROS or simulator dependency. SI units throughout.
 // Equations/nominal coefficients: see README.md and REFERENCES.md.
@@ -18,54 +19,15 @@
 
 namespace bluerov2 {
 
-using Vec6 = Eigen::Matrix<double, 6, 1>;
+using dynamics::Mat6;
+using dynamics::Measurement;
+using dynamics::MeasurementNoiseParameters;
+using dynamics::six;
+using dynamics::skew;
+using dynamics::Vec12;
+using dynamics::Vec6;
 using Vec8 = Eigen::Matrix<double, 8, 1>;
-using Vec12 = Eigen::Matrix<double, 12, 1>;
-using Mat6 = Eigen::Matrix<double, 6, 6>;
 using AllocationMatrix = Eigen::Matrix<double, 6, 8>;
-
-inline Vec6 six(double a, double b, double c, double d, double e, double f) {
-  Vec6 x;
-  x << a, b, c, d, e, f;
-  return x;
-}
-
-inline Eigen::Matrix3d skew(const Eigen::Vector3d& x) {
-  Eigen::Matrix3d s;
-  s << 0., -x.z(), x.y(), x.z(), 0., -x.x(), -x.y(), x.x(), 0.;
-  return s;
-}
-
-struct MeasurementNoiseParameters {
-  bool enabled = false;
-  // Variances, NOT standard deviations or spectral noise densities.
-  // Order: [position(3), rotation-vector error(3), linear velocity(3),
-  //         angular velocity(3)]. Position/rotation errors use inertial axes;
-  // velocity errors use aligned sensor/body axes. All outputs are inertial.
-  // Units: [m^2, rad^2, (m/s)^2, (rad/s)^2], three entries per group.
-  // These defaults are illustrative aided-estimator assumptions, not a
-  // calibrated BlueROV model. See MEASUREMENT_NOISE.md.
-  Vec12 white_variances = [] {
-    Vec12 v;
-    v << 4.e-4, 4.e-4, 9.e-6, 4.e-6, 4.e-6, 25.e-6, 25.e-6, 25.e-6, 25.e-6,
-        1.e-6, 1.e-6, 1.e-6;
-    return v;
-  }();
-  Vec12 colored_variances = [] {
-    Vec12 v;
-    v << 2.5e-3, 2.5e-3, 1.e-4, 25.e-6, 25.e-6, 4.e-4, 1.e-4, 1.e-4, 1.e-4,
-        9.e-6, 9.e-6, 9.e-6;
-    return v;
-  }();
-  Vec12 correlation_times = [] {
-    Vec12 t;
-    t << 10., 10., 10., 1., 1., 5., .2, .2, .2, 30., 30., 30.;
-    return t;
-  }();  // seconds, one per colored error channel
-  double sample_period = 0.01;  // seconds; 0 = sample at every internal step
-  std::uint64_t seed = 42;
-  bool stationary_initialization = true;
-};
 
 struct Parameters {
   // Integration and velocity controller. Gains have units 1/s:
@@ -158,68 +120,32 @@ struct Diagnostics {
   bool allocation_converged = true;
 };
 
-struct Measurement {
-  // Noisy estimated pose and geometric twist, both in INERTIAL coordinates.
-  // Held between sensor updates; sample_time is the measurement timestamp.
-  Eigen::Matrix4d pose = Eigen::Matrix4d::Identity();
-  Eigen::VectorXd twist = Eigen::VectorXd::Zero(6);
-  double sample_time = 0.;
-  bool valid = false;
-};
-
 namespace detail {
-struct MeasurementNoiseMemory {
-  explicit MeasurementNoiseMemory(const MeasurementNoiseParameters& p)
-      : configuration(p), generator(p.seed) {}
-  MeasurementNoiseParameters configuration;
-  std::mt19937_64 generator;
-  std::normal_distribution<double> normal{0., 1.};
-  Vec12 colored_error = Vec12::Zero();
-  double epoch = 0., last_sample_time = 0., next_sample_time = 0.;
-  std::uint64_t sample_count = 0;
-  bool initialized = false;
-};
+using dynamics::detail::clock_tolerance;
+using dynamics::detail::Derivative;
+using dynamics::detail::exact_measurement;
+using dynamics::detail::InternalState;
+using dynamics::detail::MeasurementNoiseMemory;
+using dynamics::detail::orientation_map;
+using dynamics::detail::require;
+using dynamics::detail::same_noise_settings;
+using dynamics::detail::sample_if_due;
+using dynamics::detail::shifted;
+using dynamics::detail::to_internal;
+using dynamics::detail::transport;
+using dynamics::detail::validate_pose;
 }  // namespace detail
 
-struct State {
-  // H = [R p; 0 0 0 1], mapping vehicle/body coordinates into INERTIAL axes.
-  // Inertial z points up. Position/orientation have a single source of truth.
-  Eigen::Matrix4d pose = [] {
-    Eigen::Matrix4d h = Eigen::Matrix4d::Identity();
-    h(2, 3) = -2.;
-    return h;
-  }();
-  // Actual INERTIAL geometric twist at the vehicle origin, m/s and rad/s:
-  // [p_dot; omega_world], with R_dot = skew(omega_world) * R.
-  // This is NOT the translational component of the spatial Lie-algebra twist.
-  Eigen::VectorXd twist = Eigen::VectorXd::Zero(6);
-  // Needed only when thruster_time_constant > 0; keep this between calls.
+// Shared rigid-body pose/twist, sensor clock and random memory live in the
+// base. Preserve the reference's initial depth and eight-channel actuator
+// state.
+struct State : dynamics::RigidBodyState {
+  State() { pose(2, 3) = -2.; }
   Eigen::VectorXd thruster_forces = Eigen::VectorXd::Zero(8);
   Diagnostics diagnostics;
-  double time = 0.;         // true simulation time, seconds
-  Measurement measurement;  // most recent feedback sample; never replaces truth
-  // Retain the complete State between calls. Copying State copies the random
-  // stream by value, so independent rollouts and reproducible clones are safe.
-  std::optional<detail::MeasurementNoiseMemory> measurement_noise_state;
 };
 
 namespace detail {
-
-inline void require(bool condition, const std::string& message) {
-  if (!condition) throw std::invalid_argument("BlueROV2: " + message);
-}
-
-inline void validate_pose(const Eigen::Matrix4d& pose) {
-  require(pose.allFinite(), "nonfinite pose");
-  require((pose.row(3) - Eigen::RowVector4d(0., 0., 0., 1.)).norm() < 1.e-12,
-          "pose must have homogeneous bottom row [0 0 0 1]");
-  const Eigen::Matrix3d rotation = pose.topLeftCorner<3, 3>();
-  require(
-      (rotation.transpose() * rotation - Eigen::Matrix3d::Identity()).norm() <
-              1.e-6 &&
-          std::abs(rotation.determinant() - 1.) < 1.e-6,
-      "rotation must be a proper 3x3 rotation matrix");
-}
 
 inline void validate_state(const State& s) {
   validate_pose(s.pose);
@@ -229,21 +155,6 @@ inline void validate_state(const State& s) {
           "actual twist must have six finite entries");
   require(s.thruster_forces.size() == 8 && s.thruster_forces.allFinite(),
           "thruster state must have eight finite entries");
-}
-
-// Rotate two geometric 3-vectors at the SAME physical point. No translation
-// block: this is not the full SE(3) Adjoint/spatial-origin change of reference.
-inline Mat6 orientation_map(const Eigen::Matrix3d& rotation) {
-  Mat6 t = Mat6::Zero();
-  t.topLeftCorner<3, 3>() = rotation;
-  t.bottomRightCorner<3, 3>() = rotation;
-  return t;
-}
-
-inline Vec6 transport(const Vec6& nu_body) {
-  Vec6 c = Vec6::Zero();
-  c.head<3>() = nu_body.tail<3>().cross(nu_body.head<3>());
-  return c;  // omega x omega is identically zero.
 }
 
 struct Model {
@@ -424,120 +335,14 @@ inline Vec8 allocate(const Vec6& requested, const Vec8& warm_start,
                      const Parameters& p,
                      const AllocationMatrix& allocation_world, int& iterations,
                      bool* converged = nullptr) {
-  // Minimize ||W(Bf-requested)||^2 + lambda*||f||^2, box-constrained.
-  // Feasible primal active-set QP: solve free variables exactly, move to the
-  // first blocking bound, and release bounds violating the KKT conditions.
-  // This also removes warm-start nullspace thrust after a saturated command.
-  const AllocationMatrix a =
-      p.allocation_weights.asDiagonal() * allocation_world;
-  const Vec6 b = p.allocation_weights.cwiseProduct(requested);
-  Eigen::Matrix<double, 8, 8> hessian = a.transpose() * a;
-  hessian.diagonal().array() += p.allocation_regularization;
-  const Vec8 linear = a.transpose() * b;
-  Vec8 f = clamp_forces(warm_start, p);
-  // 0: free; -1: lower bound; +1: upper bound; 2: disabled/fixed actuator.
-  std::array<int, 8> active{};
-  for (int j = 0; j < 8; ++j) {
-    if (p.thrust_max[j] == p.thrust_min[j])
-      active[j] = 2;
-    else if (f[j] <= p.thrust_min[j])
-      active[j] = -1;
-    else if (f[j] >= p.thrust_max[j])
-      active[j] = 1;
-  }
-  iterations = 0;
-  if (converged) *converged = false;
-  const double kkt_tolerance =
-      p.allocation_tolerance * (1. + linear.cwiseAbs().maxCoeff());
-  for (int k = 0; k < p.allocation_max_iterations; ++k) {
-    iterations = k + 1;
-    std::array<int, 8> free{};
-    int nfree = 0;
-    for (int j = 0; j < 8; ++j)
-      if (active[j] == 0) free[nfree++] = j;
-    Vec8 candidate = f;
-    if (nfree > 0) {
-      Eigen::MatrixXd hff(nfree, nfree);
-      Eigen::VectorXd rhs(nfree);
-      for (int row = 0; row < nfree; ++row) {
-        const int i = free[row];
-        rhs[row] = linear[i];
-        for (int j = 0; j < 8; ++j)
-          if (active[j] != 0) rhs[row] -= hessian(i, j) * f[j];
-        for (int column = 0; column < nfree; ++column)
-          hff(row, column) = hessian(i, free[column]);
-      }
-      const Eigen::VectorXd solution = hff.ldlt().solve(rhs);
-      if (!solution.allFinite())
-        throw std::runtime_error("BlueROV2: allocator linear solve failed");
-      for (int j = 0; j < nfree; ++j) candidate[free[j]] = solution[j];
-    }
-    const Vec8 direction = candidate - f;
-    double fraction = 1.;
-    int blocker = -1;
-    int blocker_side = 0;
-    for (int j = 0; j < 8; ++j) {
-      if (active[j] != 0) continue;
-      double allowed = 1.;
-      int side = 0;
-      if (candidate[j] < p.thrust_min[j] && direction[j] < 0.) {
-        allowed = (p.thrust_min[j] - f[j]) / direction[j];
-        side = -1;
-      } else if (candidate[j] > p.thrust_max[j] && direction[j] > 0.) {
-        allowed = (p.thrust_max[j] - f[j]) / direction[j];
-        side = 1;
-      }
-      if (side != 0 && allowed < fraction) {
-        fraction = std::max(0., allowed);
-        blocker = j;
-        blocker_side = side;
-      }
-    }
-    f = clamp_forces(f + fraction * direction, p);
-    if (blocker >= 0) {
-      active[blocker] = blocker_side;
-      f[blocker] =
-          blocker_side < 0 ? p.thrust_min[blocker] : p.thrust_max[blocker];
-      continue;
-    }
-    const Vec8 gradient = hessian * f - linear;
-    int release = -1;
-    double largest_violation = kkt_tolerance;
-    for (int j = 0; j < 8; ++j) {
-      const double violation = active[j] == -1  ? -gradient[j]
-                               : active[j] == 1 ? gradient[j]
-                                                : 0.;
-      if (violation > largest_violation) {
-        largest_violation = violation;
-        release = j;
-      }
-    }
-    if (release < 0) {
-      if (converged) *converged = true;
-      return f;
-    }
-    active[release] = 0;
-  }
-  return f;
+  bool solved = false;
+  const Eigen::VectorXd outputs = dynamics::detail::bounded_least_squares(
+      allocation_world, requested, warm_start, p.thrust_min, p.thrust_max,
+      p.allocation_weights, p.allocation_regularization,
+      p.allocation_max_iterations, p.allocation_tolerance, iterations, solved);
+  if (converged) *converged = solved;
+  return outputs;
 }
-
-struct InternalState {
-  Eigen::Vector3d position;
-  Eigen::Quaterniond q;
-  Vec6 nu;
-};
-
-inline InternalState to_internal(const State& state) {
-  const Eigen::Matrix3d rotation = state.pose.topLeftCorner<3, 3>();
-  return {state.pose.topRightCorner<3, 1>(),
-          Eigen::Quaterniond(rotation).normalized(),
-          orientation_map(rotation).transpose() * state.twist};
-}
-struct Derivative {
-  Eigen::Vector3d position;
-  Eigen::Vector4d quaternion;  // Eigen coefficient order: x,y,z,w
-  Vec6 nu;
-};
 
 inline Vec8 actuator_force(const Vec8& initial, const Vec8& setpoint,
                            double elapsed, double time_constant) {
@@ -560,37 +365,17 @@ inline Derivative derivative(const InternalState& x, const Vec8& forces,
   return d;
 }
 
-inline InternalState shifted(const InternalState& x, const Derivative& d,
-                             double h) {
-  InternalState y = x;
-  y.position += h * d.position;
-  y.q.coeffs() += h * d.quaternion;
-  y.nu += h * d.nu;
-  return y;
-}
-
 inline void rk4(InternalState& x, Vec8& forces, const Vec8& setpoint, double h,
                 const Parameters& p, const Model& m) {
-  const Vec8 f0 =
-      actuator_force(forces, setpoint, 0., p.thruster_time_constant);
-  const Vec8 fm =
-      actuator_force(forces, setpoint, 0.5 * h, p.thruster_time_constant);
-  const Vec8 f1 = actuator_force(forces, setpoint, h, p.thruster_time_constant);
-  const auto k1 = derivative(x, f0, p, m);
-  const auto k2 = derivative(shifted(x, k1, h * 0.5), fm, p, m);
-  const auto k3 = derivative(shifted(x, k2, h * 0.5), fm, p, m);
-  const auto k4 = derivative(shifted(x, k3, h), f1, p, m);
-  x.position += (h / 6.) * (k1.position + 2. * k2.position + 2. * k3.position +
-                            k4.position);
-  x.q.coeffs() += (h / 6.) * (k1.quaternion + 2. * k2.quaternion +
-                              2. * k3.quaternion + k4.quaternion);
-  x.q.normalize();
-  x.nu += (h / 6.) * (k1.nu + 2. * k2.nu + 2. * k3.nu + k4.nu);
-  forces = clamp_forces(f1, p);
-  if (!x.position.allFinite() || !x.nu.allFinite() || !x.q.coeffs().allFinite())
-    throw std::runtime_error(
-        "BlueROV2: integration became nonfinite; check parameters and reduce "
-        "step size");
+  dynamics::detail::rk4_rigid_body(
+      x, h, [&](const InternalState& stage, double elapsed) {
+        return derivative(
+            stage,
+            actuator_force(forces, setpoint, elapsed, p.thruster_time_constant),
+            p, m);
+      });
+  forces = clamp_forces(
+      actuator_force(forces, setpoint, h, p.thruster_time_constant), p);
 }
 
 inline void validate_force_state(const State& state, const Parameters& p) {
@@ -623,16 +408,6 @@ inline Diagnostics diagnose(const InternalState& x, const Vec6& requested_body,
   return d;
 }
 
-inline Measurement exact_measurement(const InternalState& x, double time) {
-  Measurement y;
-  y.pose.topLeftCorner<3, 3>() = x.q.toRotationMatrix();
-  y.pose.topRightCorner<3, 1>() = x.position;
-  y.twist = orientation_map(x.q.toRotationMatrix()) * x.nu;
-  y.sample_time = time;
-  y.valid = true;
-  return y;
-}
-
 inline State finish(const InternalState& x, const Vec8& forces,
                     const Diagnostics& diagnostic, double time = 0.) {
   require(std::isfinite(time), "simulation clock overflow");
@@ -646,78 +421,6 @@ inline State finish(const InternalState& x, const Vec8& forces,
   out.time = time;
   out.measurement = exact_measurement(x, time);
   return out;
-}
-
-inline bool same_noise_settings(const MeasurementNoiseParameters& a,
-                                const MeasurementNoiseParameters& b) {
-  return a.seed == b.seed && a.sample_period == b.sample_period &&
-         a.stationary_initialization == b.stationary_initialization &&
-         (a.white_variances.array() == b.white_variances.array()).all() &&
-         (a.colored_variances.array() == b.colored_variances.array()).all() &&
-         (a.correlation_times.array() == b.correlation_times.array()).all();
-}
-
-inline double clock_tolerance(double time) {
-  return 32. * std::numeric_limits<double>::epsilon() *
-         std::max(1., std::abs(time));
-}
-
-// Update an estimated-state sensor at its own clock. Its sample is held between
-// updates. Position errors do not enter the physical integrator. Rotation
-// errors act on SO(3); the shared rotation perturbation couples attitude and
-// twist.
-inline void sample_if_due(const InternalState& truth, double time,
-                          MeasurementNoiseMemory& memory, Measurement& y) {
-  const auto& n = memory.configuration;
-  const double tol = clock_tolerance(time);
-  if (memory.initialized) {
-    if (n.sample_period > 0. && time < memory.next_sample_time - tol) return;
-    if (n.sample_period == 0. && time <= memory.last_sample_time + tol) return;
-    const double elapsed = time - memory.last_sample_time;
-    require(elapsed >= 0.,
-            "measurement clock moved backwards; reset noise state");
-    for (int j = 0; j < 12; ++j) {
-      const double r = elapsed / n.correlation_times[j];
-      const double a = std::exp(-r);
-      const double innovation_std =
-          std::sqrt(n.colored_variances[j]) * std::sqrt(-std::expm1(-2. * r));
-      memory.colored_error[j] =
-          a * memory.colored_error[j] +
-          innovation_std * memory.normal(memory.generator);
-    }
-  } else {
-    memory.epoch = time;
-    for (int j = 0; j < 12; ++j) {
-      memory.colored_error[j] = n.stationary_initialization
-                                    ? std::sqrt(n.colored_variances[j]) *
-                                          memory.normal(memory.generator)
-                                    : 0.;
-    }
-    memory.initialized = true;
-  }
-  Vec12 e = memory.colored_error;
-  for (int j = 0; j < 12; ++j)
-    e[j] += std::sqrt(n.white_variances[j]) * memory.normal(memory.generator);
-  const Eigen::Vector3d theta = e.segment<3>(3);
-  const double angle = theta.norm();
-  Eigen::Matrix3d error_rotation = Eigen::Matrix3d::Identity();
-  if (angle > 0.)
-    error_rotation = Eigen::AngleAxisd(angle, theta / angle).toRotationMatrix();
-  y = exact_measurement(truth, time);
-  y.pose.topRightCorner<3, 1>() += e.head<3>();
-  y.pose.topLeftCorner<3, 3>() = error_rotation * truth.q.toRotationMatrix();
-  const Eigen::Matrix3d measured_rotation = y.pose.topLeftCorner<3, 3>();
-  // Body/sensor errors rotate into the inertial frame through the SAME
-  // measured attitude, creating attitude/velocity cross-correlations.
-  y.twist.head<3>() =
-      measured_rotation * (truth.nu.head<3>() + e.segment<3>(6));
-  y.twist.tail<3>() = measured_rotation * (truth.nu.tail<3>() + e.tail<3>());
-  require(y.pose.allFinite() && y.twist.allFinite(),
-          "nonfinite measurement; check noise variances");
-  memory.last_sample_time = time;
-  ++memory.sample_count;
-  memory.next_sample_time =
-      memory.epoch + double(memory.sample_count) * n.sample_period;
 }
 
 inline State step_with_measurements(const Vec6& target,
