@@ -1,14 +1,9 @@
-import os, sys
-
-# currentdir = os.path.dirname(os.path.realpath(__file__))
-# parentdir = os.path.dirname(currentdir)
-# sys.path.append(parentdir)
-
+import os
 import numpy as np
-from uaibot.utils import *
-from uaibot.graphics.meshmaterial import *
-from uaibot.simobjects.group import *
-from uaibot.simobjects.frame import *
+from uaibot.utils import Utils
+from uaibot.graphics.model3d import Model3D
+from uaibot.simobjects.group import Group
+from uaibot.simobjects.frame import Frame
 
 from ._set_ani_frame import _set_ani_frame
 from ._add_ani_frame import _add_ani_frame
@@ -30,7 +25,6 @@ from ._vector_field_SE3 import _vector_field_SE3, _DELTA as _DELTA_SE3, _DS as _
 
 from ._gen_code import _gen_code
 from ._update_col_object import _update_col_object
-from ._add_col_object import _add_col_object
 from ._attach_object import _attach_object
 from ._detach_object import _detach_object
 
@@ -51,30 +45,26 @@ from ._create_kinova_gen3 import _create_kinova_gen3
 from ._create_jaco import _create_jaco
 from ._create_ur_ur3e import _create_ur_ur3e
 
-from .links import *
+from .links import Link
 
 from ._constrained_control import _constrained_control
-from uaibot.simulation.simulation import *
-
-from ._dist_struct_robot_obj import *
-from ._dist_struct_robot_auto import *
+from ._dist_struct_robot_obj import DistStructRobotObj, DistStructLinkObj
+from ._dist_struct_robot_auto import DistStructRobotAuto, DistStructLinkLink
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from uaibot.robot import DistStructRobotObj
-    from uaibot.robot import DistStructRobotAuto
-    from uaibot.robot import Link
     from uaibot.simulation import Simulation
 
 from numpy.typing import ArrayLike, NDArray
 
-import os
 if os.environ['CPP_SO_FOUND']=="1":
     import uaibot_cpp_bind as ub_cpp
     from ._to_cpp import _to_cpp
 
 from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject, GroupableObject, Groupable
 from typing import Optional, Tuple, List
+
+__all__ = ["Robot"]
 
 
 class Robot(Groupable):
@@ -214,11 +204,11 @@ class Robot(Groupable):
         if not Utils.is_a_matrix(htm_n_eef, 4, 4):
             raise Exception("The parameter 'htm_n_eef' should be a 4x4 homogeneous transformation matrix.")
 
-        if not (str(type(links)) == "<class 'list'>"):
+        if not isinstance(links, list):
             raise Exception("The parameter 'links' should be a list of 'uaibot.Link' objects.")
         else:
             for link in links:
-                if not Utils.get_uaibot_type(link) == "uaibot.Link":
+                if not isinstance(link, Link):
                     raise Exception("The parameter 'links' should be a list of 'uaibot.Link' objects.")
 
         n = len(links)
@@ -231,18 +221,20 @@ class Robot(Groupable):
         else:
             self._q0 = np.matrix(np.zeros((n,1)))
 
-        if not (str(type(list_base_3d_obj)) == "<class 'list'>" or (list_base_3d_obj is None)):
+        if list_base_3d_obj is None:
+            list_base_3d_obj = []
+        if not isinstance(list_base_3d_obj, list):
             raise Exception("The parameter 'list_base_3d_obj' should be a list of 'uaibot.Model3D' objects.")
         else:
             for i in range(len(list_base_3d_obj)):
-                if not (Utils.get_uaibot_type(list_base_3d_obj[i]) == "uaibot.Model3D"):
+                if not isinstance(list_base_3d_obj[i], Model3D):
                     raise Exception(
                         "The parameter 'list_base_3d_obj' should be a list of 'uaibot.Model3D' objects.")
 
         if not Utils.is_a_vector(self._q0, n):
             raise Exception("The parameter 'q0' should be a " + str(n) + " dimensional vector.")
 
-        if not str(type(eef_frame_visible)) == "<class 'bool'>":
+        if not isinstance(eef_frame_visible, bool):
             raise Exception("The parameter 'eef_frame_visible' must be a boolean.")
 
         if not joint_limits is None:
@@ -832,6 +824,9 @@ class Robot(Groupable):
         sim : 'Simulation' object
             'Simulation' object.
     """
+        # This helper may import Simulation for a runtime isinstance check.
+        # Import it only after Robot and its package have finished initializing.
+        from ._add_col_object import _add_col_object
         _add_col_object(self, sim)
 
     def attach_object(self, obj: GroupableObject) -> None:
@@ -1568,3 +1563,4 @@ class Robot(Groupable):
                               tol, dist_tol, no_iter_max, mode)
      
     #######################################################################################################
+

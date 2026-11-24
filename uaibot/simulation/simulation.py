@@ -5,23 +5,38 @@ except ImportError:
     # Fallback for old versions
     from IPython.core.display import display, HTML
 import re
-from uaibot.utils import *
-from uaibot.graphics.meshmaterial import *
-from uaibot.simobjects.box import *
-from uaibot.simobjects.pointlight import *
-from uaibot.simobjects.pointcloud import *
-from uaibot.simobjects.frame import *
+import numpy as np
+from uaibot.graphics.texture import Texture
+from uaibot.graphics.meshmaterial import MeshMaterial
+from uaibot.simobjects.box import Box
+from uaibot.simobjects.pointlight import PointLight
+from uaibot.robot import Robot
+from uaibot.simobjects.group import Group
+
+from uaibot.simobjects.frame import Frame
 import time
 from pathlib import Path
-import httplib2
-import sys
-from uaibot.utils.types import HTMatrix, Matrix, Vector, SimObject
-from typing import Optional, Tuple, List
+
+from uaibot.utils.types import SimObject, HtmlDiv
+from uaibot.utils import (
+    is_a_number,
+    is_a_color,
+    is_a_obj_sim,
+    is_a_vector,
+    trn,
+    is_url_available,
+    url_modified,
+    get_environment,
+    IS_OBJ_SIM,
+)
+from typing import Optional, List
 import os
 import inspect
 import webbrowser
 import random
 import tempfile
+
+__all__ = ["Simulation"]
 
 class Simulation:
     """
@@ -192,7 +207,7 @@ class Simulation:
                  pixel_ratio : float = 0.9, anti_aliasing: bool = True,
                  local_host_port: str = '') -> "Simulation":
 
-        if not Utils.is_a_number(ambient_light_intensity) or ambient_light_intensity < 0:
+        if not is_a_number(ambient_light_intensity) or ambient_light_intensity < 0:
             raise Exception("The parameter 'ambient_light_intensity' should be a nonnegative float.")
 
         if not (camera_type in Simulation._CAMERATYPE):
@@ -200,22 +215,22 @@ class Simulation:
                 Simulation._CAMERATYPE) + ".")
 
         
-        if (not width==[]) and (not Utils.is_a_number(width) or width <= 0):
+        if (not width==[]) and (not is_a_number(width) or width <= 0):
             raise Exception("The parameter 'width' must be a positive float or [] (automatic).")
 
-        if (not height==[]) and (not Utils.is_a_number(height) or height <= 0):
+        if (not height==[]) and (not is_a_number(height) or height <= 0):
             raise Exception("The parameter 'height' must be a positive float or [] (automatic).")
         
-        if not str(type(show_world_frame)) == "<class 'bool'>":
+        if not isinstance(show_world_frame, bool):
             raise Exception("The parameter 'show_world_frame' must be a boolean.")
 
-        if not str(type(show_grid)) == "<class 'bool'>":
+        if not isinstance(show_grid, bool):
             raise Exception("The parameter 'show_grid' must be a boolean.")
 
-        if not Utils.is_a_color(load_screen_color):
+        if not is_a_color(load_screen_color):
             raise Exception("The parameter 'load_screen_color' must be a HTML-compatible color.")
 
-        if not Utils.is_a_color(background_color):
+        if not is_a_color(background_color):
             raise Exception("The parameter 'background_color' must be a HTML-compatible color.")
 
 
@@ -229,13 +244,13 @@ class Simulation:
             else:
                 camera_start_pose = [1.3, 1.8, 2.7, 0, 0, 0, 4]
 
-        if not Utils.is_a_vector(camera_start_pose,7):
+        if not is_a_vector(camera_start_pose,7):
             raise Exception("The parameter 'camera_start_pose' should be either None or a 7 element vector.")
 
-        if not Utils.is_a_number(pixel_ratio) or pixel_ratio < 0 or pixel_ratio>1:
+        if not is_a_number(pixel_ratio) or pixel_ratio < 0 or pixel_ratio>1:
             raise Exception("The parameter 'pixel_ratio' should be a float number between 0 and 1.")
 
-        if not str(type(anti_aliasing)) == "<class 'bool'>":
+        if not isinstance(anti_aliasing, bool):
             raise Exception("The parameter 'anti_aliasing' must be a boolean.")
                 
         self._list_of_objects = []
@@ -245,7 +260,7 @@ class Simulation:
         self._ldr_urls = ldr_urls
         
         if width==[] or height==[]:
-            if Utils.get_environment() == 'Local':
+            if get_environment() == 'Local':
                 self._width = 960 
                 self._height = 720 
             else:
@@ -266,7 +281,7 @@ class Simulation:
              
         #Add reference frame
         if self._show_world_frame:
-            self.add(Frame(name='w0_frame', htm=Utils.trn([0,0,0]),size=0.5))
+            self.add(Frame(name='w0_frame', htm=trn([0,0,0]),size=0.5))
         
         self.add(obj_list)
 
@@ -317,13 +332,13 @@ class Simulation:
 
         mesh_ground = MeshMaterial(texture_map=texture_ground, metalness=1, roughness=1)
 
-        ground = Box(name="ground", width=6, depth=6, height=0.01, htm=Utils.trn([0, 0, -0.005]),
+        ground = Box(name="ground", width=6, depth=6, height=0.01, htm=trn([0, 0, -0.005]),
                      mesh_material=mesh_ground)
 
-        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=Utils.trn([-1,-1, 1.5]))
-        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=Utils.trn([-1, 1, 1.5]))
-        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=Utils.trn([ 1,-1, 1.5]))
-        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=Utils.trn([ 1, 1, 1.5]))
+        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=trn([-1,-1, 1.5]))
+        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=trn([-1, 1, 1.5]))
+        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=trn([ 1,-1, 1.5]))
+        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=trn([ 1, 1, 1.5]))
 
         ldr_url = "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/LDR/factory_"
         ldr_list = [ldr_url + "px.png", ldr_url + "nx.png", ldr_url + "py.png", ldr_url + "ny.png", ldr_url + "nz.png",
@@ -363,13 +378,13 @@ class Simulation:
 
         mesh_ground = MeshMaterial(texture_map=texture_ground, metalness=0, roughness=1)
 
-        ground = Box(name="ground", width=100, depth=100, height=0.01, htm=Utils.trn([0, 0, -0.005]),
+        ground = Box(name="ground", width=100, depth=100, height=0.01, htm=trn([0, 0, -0.005]),
                      mesh_material=mesh_ground)
 
-        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=Utils.trn([-1,-1, 1.5]))
-        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=Utils.trn([-1, 1, 1.5]))
-        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=Utils.trn([ 1,-1, 1.5]))
-        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=Utils.trn([ 1, 1, 1.5]))
+        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=trn([-1,-1, 1.5]))
+        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=trn([-1, 1, 1.5]))
+        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=trn([ 1,-1, 1.5]))
+        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=trn([ 1, 1, 1.5]))
 
         ldr_url = "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/LDR/puresky_"
         ldr_list = [ldr_url + "px.png", ldr_url + "nx.png", ldr_url + "py.png", ldr_url + "ny.png", ldr_url + "pz.png",
@@ -409,13 +424,13 @@ class Simulation:
 
         mesh_ground = MeshMaterial(texture_map=texture_ground, metalness=0, roughness=1)
 
-        ground = Box(name="ground", width=100, depth=100, height=0.01, htm=Utils.trn([0, 0, -0.005]),
+        ground = Box(name="ground", width=100, depth=100, height=0.01, htm=trn([0, 0, -0.005]),
                      mesh_material=mesh_ground)
 
-        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=Utils.trn([-1,-1, 1.5]))
-        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=Utils.trn([-1, 1, 1.5]))
-        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=Utils.trn([ 1,-1, 1.5]))
-        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=Utils.trn([ 1, 1, 1.5]))
+        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=trn([-1,-1, 1.5]))
+        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=trn([-1, 1, 1.5]))
+        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=trn([ 1,-1, 1.5]))
+        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=trn([ 1, 1, 1.5]))
 
         ldr_url = "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/LDR/snow_"
         ldr_list = [ldr_url + "px.png", ldr_url + "nx.png", ldr_url + "py.png", ldr_url + "ny.png", ldr_url + "pz.png",
@@ -452,13 +467,13 @@ class Simulation:
 
         mesh_ground = MeshMaterial(texture_map=texture_ground, metalness=0, roughness=1)
 
-        ground = Box(name="ground", width=100, depth=100, height=0.01, htm=Utils.trn([0, 0, -0.005]),
+        ground = Box(name="ground", width=100, depth=100, height=0.01, htm=trn([0, 0, -0.005]),
                      mesh_material=mesh_ground)
 
-        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=Utils.trn([-1,-1, 1.5]))
-        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=Utils.trn([-1, 1, 1.5]))
-        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=Utils.trn([ 1,-1, 1.5]))
-        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=Utils.trn([ 1, 1, 1.5]))
+        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=trn([-1,-1, 1.5]))
+        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=trn([-1, 1, 1.5]))
+        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=trn([ 1,-1, 1.5]))
+        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=trn([ 1, 1, 1.5]))
 
         ldr_url = "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/LDR/green_"
         ldr_list = [ldr_url + "px.jpg", ldr_url + "nx.jpg", ldr_url + "py.jpg", ldr_url + "ny.jpg", ldr_url + "pz.jpg",
@@ -499,13 +514,13 @@ class Simulation:
 
         mesh_ground = MeshMaterial(texture_map=texture_ground, metalness=0, roughness=1)
 
-        ground = Box(name="ground", width=20, depth=20, height=0.01, htm=Utils.trn([0, 0, -0.005]),
+        ground = Box(name="ground", width=20, depth=20, height=0.01, htm=trn([0, 0, -0.005]),
                      mesh_material=mesh_ground)
 
-        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=Utils.trn([-1,-1, 1.5]))
-        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=Utils.trn([-1, 1, 1.5]))
-        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=Utils.trn([ 1,-1, 1.5]))
-        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=Utils.trn([ 1, 1, 1.5]))
+        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=trn([-1,-1, 1.5]))
+        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=trn([-1, 1, 1.5]))
+        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=trn([ 1,-1, 1.5]))
+        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=trn([ 1, 1, 1.5]))
 
         ldr_url = "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/LDR/hill_"
         ldr_list = [ldr_url + "px.png", ldr_url + "nx.png", ldr_url + "py.png", ldr_url + "ny.png", ldr_url + "pz.png",
@@ -545,13 +560,13 @@ class Simulation:
 
         mesh_ground = MeshMaterial(texture_map=texture_ground, metalness=0, roughness=1)
 
-        ground = Box(name="ground", width=20, depth=20, height=0.01, htm=Utils.trn([0, 0, -0.005]),
+        ground = Box(name="ground", width=20, depth=20, height=0.01, htm=trn([0, 0, -0.005]),
                      mesh_material=mesh_ground)
 
-        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=Utils.trn([-1,-1, 1.5]))
-        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=Utils.trn([-1, 1, 1.5]))
-        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=Utils.trn([ 1,-1, 1.5]))
-        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=Utils.trn([ 1, 1, 1.5]))
+        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=trn([-1,-1, 1.5]))
+        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=trn([-1, 1, 1.5]))
+        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=trn([ 1,-1, 1.5]))
+        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=trn([ 1, 1, 1.5]))
 
         ldr_url = "https://cdn.jsdelivr.net/gh/UAIbot/uaibot_data@master/LDR/orchard_road_"
         ldr_list = [ldr_url + "px.png", ldr_url + "nx.png", ldr_url + "py.png", ldr_url + "ny.png", ldr_url + "pz.png",
@@ -593,26 +608,26 @@ class Simulation:
         
         size = 20
 
-        ground = Box(width=size, depth=size, height=0.01, htm=Utils.trn([0, 0, -0.005]),
+        ground = Box(width=size, depth=size, height=0.01, htm=trn([0, 0, -0.005]),
                      mesh_material=mesh_ground)
 
-        wall1 = Box(width=0.005, depth=size, height=size, htm=Utils.trn([size/2, 0, size/2]),
+        wall1 = Box(width=0.005, depth=size, height=size, htm=trn([size/2, 0, size/2]),
                      mesh_material=mesh_ground)
 
-        wall2 = Box(width=0.005, depth=size, height=size, htm=Utils.trn([-size/2, 0, size/2]),
+        wall2 = Box(width=0.005, depth=size, height=size, htm=trn([-size/2, 0, size/2]),
                      mesh_material=mesh_ground)
 
-        wall3 = Box(width=size, depth=0.005, height=size, htm=Utils.trn([0, size/2, size/2]),
+        wall3 = Box(width=size, depth=0.005, height=size, htm=trn([0, size/2, size/2]),
                      mesh_material=mesh_ground)
 
-        wall4 = Box(width=size, depth=0.005, height=size, htm=Utils.trn([0, -size/2, size/2]),
+        wall4 = Box(width=size, depth=0.005, height=size, htm=trn([0, -size/2, size/2]),
                      mesh_material=mesh_ground)
                         
-        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=Utils.trn([-2,-2, 5.0]))
-        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=Utils.trn([-2, 2, 5.0]))
-        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=Utils.trn([ 2,-2, 5.0]))
-        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=Utils.trn([ 2, 2, 5.0]))
-        light5 = PointLight(name="light5", color="white", intensity=light_intensity, htm=Utils.trn([ 0,0,5]))
+        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=trn([-2,-2, 5.0]))
+        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=trn([-2, 2, 5.0]))
+        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=trn([ 2,-2, 5.0]))
+        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=trn([ 2, 2, 5.0]))
+        light5 = PointLight(name="light5", color="white", intensity=light_intensity, htm=trn([ 0,0,5]))
 
         sim = Simulation(objects, ambient_light_intensity=light_intensity, show_grid=False)
         sim.add(ground)
@@ -654,26 +669,26 @@ class Simulation:
         
         size = 20
 
-        ground = Box(width=size, depth=size, height=0.01, htm=Utils.trn([0, 0, -0.005]),
+        ground = Box(width=size, depth=size, height=0.01, htm=trn([0, 0, -0.005]),
                      mesh_material=mesh_ground)
 
-        wall1 = Box(width=0.005, depth=size, height=size, htm=Utils.trn([size/2, 0, size/2]),
+        wall1 = Box(width=0.005, depth=size, height=size, htm=trn([size/2, 0, size/2]),
                      mesh_material=mesh_ground)
 
-        wall2 = Box(width=0.005, depth=size, height=size, htm=Utils.trn([-size/2, 0, size/2]),
+        wall2 = Box(width=0.005, depth=size, height=size, htm=trn([-size/2, 0, size/2]),
                      mesh_material=mesh_ground)
 
-        wall3 = Box(width=size, depth=0.005, height=size, htm=Utils.trn([0, size/2, size/2]),
+        wall3 = Box(width=size, depth=0.005, height=size, htm=trn([0, size/2, size/2]),
                      mesh_material=mesh_ground)
 
-        wall4 = Box(width=size, depth=0.005, height=size, htm=Utils.trn([0, -size/2, size/2]),
+        wall4 = Box(width=size, depth=0.005, height=size, htm=trn([0, -size/2, size/2]),
                      mesh_material=mesh_ground)
                         
-        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=Utils.trn([-2,-2, 5.0]))
-        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=Utils.trn([-2, 2, 5.0]))
-        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=Utils.trn([ 2,-2, 5.0]))
-        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=Utils.trn([ 2, 2, 5.0]))
-        light5 = PointLight(name="light5", color="white", intensity=light_intensity, htm=Utils.trn([ 0,0,5]))
+        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=trn([-2,-2, 5.0]))
+        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=trn([-2, 2, 5.0]))
+        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=trn([ 2,-2, 5.0]))
+        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=trn([ 2, 2, 5.0]))
+        light5 = PointLight(name="light5", color="white", intensity=light_intensity, htm=trn([ 0,0,5]))
 
         sim = Simulation(objects, ambient_light_intensity=light_intensity, show_grid=False)
         sim.add(ground)
@@ -707,11 +722,11 @@ class Simulation:
 
 
                             
-        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=Utils.trn([-1,-1, 1.0]))
-        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=Utils.trn([-1, 1, 1.0]))
-        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=Utils.trn([ 1,-1, 1.0]))
-        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=Utils.trn([ 1, 1, 1.0]))
-        light5 = PointLight(name="light5", color="white", intensity=light_intensity, htm=Utils.trn([ 0,0,5]))
+        light1 = PointLight(name="light1", color="white", intensity=light_intensity, htm=trn([-1,-1, 1.0]))
+        light2 = PointLight(name="light2", color="white", intensity=light_intensity, htm=trn([-1, 1, 1.0]))
+        light3 = PointLight(name="light3", color="white", intensity=light_intensity, htm=trn([ 1,-1, 1.0]))
+        light4 = PointLight(name="light4", color="white", intensity=light_intensity, htm=trn([ 1, 1, 1.0]))
+        light5 = PointLight(name="light5", color="white", intensity=light_intensity, htm=trn([ 0,0,5]))
 
 
         sim = Simulation(objects, ambient_light_intensity=2*light_intensity, show_grid=False)
@@ -797,42 +812,42 @@ class Simulation:
           (default: None).
       """
 
-        if (not ambient_light_intensity is None) and (not Utils.is_a_number(ambient_light_intensity) or ambient_light_intensity < 0):
+        if (not ambient_light_intensity is None) and (not is_a_number(ambient_light_intensity) or ambient_light_intensity < 0):
             raise Exception("The parameter 'ambient_light_intensity' should be a nonnegative float.")
 
         if (not camera_type is None) and  (not (camera_type in Simulation._CAMERATYPE) or (not ambient_light_intensity is None)):
             raise Exception("The parameter 'camera_type' must be one of the following strings: " + str(
                 Simulation._CAMERATYPE) + ".")
 
-        if (not width is None) and  (not Utils.is_a_number(width) or width <= 0):
+        if (not width is None) and  (not is_a_number(width) or width <= 0):
             raise Exception("The parameter 'width' must be a positive float.")
 
-        if (not height is None) and  (not Utils.is_a_number(height) or height <= 0):
+        if (not height is None) and  (not is_a_number(height) or height <= 0):
             raise Exception("The parameter 'height' must be a positive float.")
 
-        if (not show_world_frame is None) and (not str(type(show_world_frame)) == "<class 'bool'>"):
+        if (not show_world_frame is None) and (not isinstance(show_world_frame, bool)):
             raise Exception("The parameter 'show_world_frame' must be a boolean.")
 
-        if (not show_grid is None) and (not str(type(show_grid)) == "<class 'bool'>"):
+        if (not show_grid is None) and (not isinstance(show_grid, bool)):
             raise Exception("The parameter 'show_grid' must be a boolean.")
 
-        if (not load_screen_color is None) and (not Utils.is_a_color(load_screen_color)):
+        if (not load_screen_color is None) and (not is_a_color(load_screen_color)):
             raise Exception("The parameter 'load_screen_color' must be a HTML-compatible color.")
 
-        if (not background_color is None) and  (not Utils.is_a_color(background_color)):
+        if (not background_color is None) and  (not is_a_color(background_color)):
             raise Exception("The parameter 'background_color' must be a HTML-compatible color.")
 
         if not (ldr_urls is None):
-            if not (str(type(ldr_urls)) == "<class 'list'>") or not (len(ldr_urls) == 6):
+            if not isinstance(ldr_urls, list) or not (len(ldr_urls) == 6):
                 raise Exception("The parameter 'ldr_urls' should be a list of six urls or 'None'.")
 
-        if (not camera_start_pose is None) and (not Utils.is_a_vector(camera_start_pose,7)):
+        if (not camera_start_pose is None) and (not is_a_vector(camera_start_pose,7)):
             raise Exception("The parameter 'camera_start_pose' should be either None or a 7 element vector.")
 
-        if (not pixel_ratio is None) and (not Utils.is_a_number(pixel_ratio) or pixel_ratio < 0 or pixel_ratio>1):
+        if (not pixel_ratio is None) and (not is_a_number(pixel_ratio) or pixel_ratio < 0 or pixel_ratio>1):
             raise Exception("The parameter 'pixel_ratio' should be a float number between 0 and 1.")
 
-        if (not anti_aliasing is None) and (not str(type(anti_aliasing)) == "<class 'bool'>"):
+        if (not anti_aliasing is None) and (not isinstance(anti_aliasing, bool)):
             raise Exception("The parameter 'anti_aliasing' must be a boolean.")
         
         if (not local_host_port is None) and (not isinstance(local_host_port, str)):
@@ -857,7 +872,7 @@ class Simulation:
 
         if not show_world_frame is None:
             if show_world_frame and (not self._show_world_frame):
-                self.add(Frame(name='w0_frame', htm=Utils.trn([0,0,0]),size=0.5))
+                self.add(Frame(name='w0_frame', htm=trn([0,0,0]),size=0.5))
             if (not show_world_frame) and self._show_world_frame:
                 for j in range(len(self._list_of_names)):
                     if self._list_of_names[j] == 'w0_frame':
@@ -898,7 +913,7 @@ class Simulation:
         img_types = ['png', 'bmp', 'jpg', 'jpeg']
         if not (self.ldr_urls is None):
             for url in self.ldr_urls:
-                error = Utils.is_url_available(Utils.url_modified(url,self.local_host_port), img_types)
+                error = is_url_available(url_modified(url,self.local_host_port), img_types)
                 if not (error == "ok!"):
                     raise Exception("The parameter 'url' " + error)
 
@@ -1016,7 +1031,7 @@ class Simulation:
         
 
         for obj in self.list_of_objects:
-            if Utils.get_uaibot_type(obj) == "uaibot.HTMLDiv":
+            if isinstance(obj, HtmlDiv):
                 string = re.sub("<!-- USER DIVS GO HERE -->",
                                 "<div id='" + obj.name + "'></div>\n <!-- USER DIVS GO HERE -->",
                                 string)
@@ -1056,7 +1071,7 @@ class Simulation:
                         string)
         string = re.sub("//SIMULATION PARAMETERS GO HERE",
                         "const ldrUrls = " + (
-                            str([Utils.url_modified(url,self.local_host_port) for url in self.ldr_urls]) if not 
+                            str([url_modified(url,self.local_host_port) for url in self.ldr_urls]) if not 
                             (self.ldr_urls is None) else "[]") + ";\n //SIMULATION PARAMETERS GO HERE",
                         string)
         string = re.sub("//SIMULATION PARAMETERS GO HERE",
@@ -1074,7 +1089,7 @@ class Simulation:
     def run(self) -> None:
         """Run simulation."""
 
-        if Utils.get_environment()=='Local':
+        if get_environment()=='Local':
             
             if self.local_host_port=='':
                 rand_suffix = random.randint(10**10, 10**12)
@@ -1111,10 +1126,10 @@ class Simulation:
         (default: 'sim')
 
     """
-        if (not (str(type(address)) == "<class 'str'>")) and (not address is None):
+        if (not isinstance(address, str)) and (not address is None):
             raise Exception(
                 "The parameter 'address' should be a string.")
-        if not (str(type(file_name)) == "<class 'str'>"):
+        if not isinstance(file_name, str):
             raise Exception(
                 "The parameter 'file_name' should be a string.")
 
@@ -1135,9 +1150,9 @@ class Simulation:
 
     def scan_group(self, group):
         for obj in group.list_of_objects:
-            if Utils.get_uaibot_type(obj) == 'uaibot.Robot' and obj.eef_frame_visible:
+            if isinstance(obj, Robot) and obj.eef_frame_visible:
                 self.add(obj._eef_frame)
-            if Utils.get_uaibot_type(obj) == 'uaibot.Group':
+            if isinstance(obj, Group):
                 self.scan_group(obj)
                 
             
@@ -1152,13 +1167,13 @@ class Simulation:
         The object(s) to be added to simulation.
     """
 
-        if str(type(obj_sim)) == "<class 'list'>":
+        if isinstance(obj_sim, list):
             for obj in obj_sim:
                 self.add(obj)
         else:
             # Error handling
-            if not Utils.is_a_obj_sim(obj_sim):
-                raise Exception("The parameter 'obj' should be one of the following: " + str(Utils.IS_OBJ_SIM) + ".")
+            if not is_a_obj_sim(obj_sim):
+                raise Exception("The parameter 'obj' should be one of the following: " + str(IS_OBJ_SIM) + ".")
 
             if obj_sim.name in self.list_of_names:
                 raise Exception("The name '" + obj_sim.name + "' is already in the list of symbols.")
@@ -1168,15 +1183,15 @@ class Simulation:
             self._list_of_names.append(obj_sim.name)
             self._list_of_objects.append(obj_sim)
             
-            if Utils.get_uaibot_type(obj_sim) == 'uaibot.Robot' and obj_sim.eef_frame_visible:
+            if isinstance(obj_sim, Robot) and obj_sim.eef_frame_visible:
                 self.add(obj_sim._eef_frame)
-            if Utils.get_uaibot_type(obj_sim) == 'uaibot.Group':
+            if isinstance(obj_sim, Group):
                 self.scan_group(obj_sim)
 
     def run_in_browser(self) -> None:
         """Run simulation in browser."""
 
-        if Utils.get_environment()=='Local':
+        if get_environment()=='Local':
             
             if self.local_host_port=='':
                 rand_suffix = random.randint(10**10, 10**12)
@@ -1203,5 +1218,4 @@ class Simulation:
             self.save(tmp_dir, file_name)
             # Convert to file:// URL and open
             webbrowser.open_new_tab(path.as_uri())
-
 

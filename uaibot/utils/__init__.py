@@ -5,8 +5,9 @@ Prefer `from uaibot import utils` and use `utils.foo(...)` directly.
 The `Utils` class below is a deprecated shim kept for backwards compatibility.
 """
 
-import warnings
-import uaibot.utils as _self
+import sys as _sys
+
+_self = _sys.modules[__name__]
 
 # Import everything that was previously inside the Utils class body.
 from .types import *  # noqa: F401,F403
@@ -14,6 +15,7 @@ from .basic import *  # noqa: F401,F403
 from .linalg import *  # noqa: F401,F403
 from .interpolation import *  # noqa: F401,F403
 from .typecheck import *  # noqa: F401,F403
+from ._cpp import *  # noqa: F401,F403
 from .distances import *  # noqa: F401,F403
 from .io import *  # noqa: F401,F403
 from .data import *  # noqa: F401,F403
@@ -66,3 +68,4 @@ if __name__ != "uaibot.utils":
         f"uaibot.utils was imported as {__name__!r}. "
         f"Fix the offending bare `import utils` to `from uaibot.utils import ...`."
     )
+

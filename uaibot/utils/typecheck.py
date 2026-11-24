@@ -1,366 +1,181 @@
-import numpy as np
-import string as st
-from colour import Color
-from .basic import cvt
-from .types import Simple, Metric, ObjSim, Groupable
-from .typecheck import is_a_vector, is_a_number, is_a_list_vector
+"""Runtime predicates without concrete uaibot-class or backend imports.
 
-    # UAIBOT_NAME_TYPES = ['uaibot.', 'cylinder.', 'box.', 'ball.', 'convexpolytope.', 'robot.', 'simulation.', 'meshmaterial.', 'mtlmeshmaterial.',
-    #                          'glbmeshmaterial.', 'texture.', 'pointlight.', 'frame.', 'model3d.', 'links.', 'pointcloud.', 'arrow.', 'rigidobject.',
-    #                          '.group', '.htmldiv', 'CPP_GeometricPrimitives', 'CPP_DistStructRobotObj','CPP_AABB']
-    #
-    # IS_SIMPLE = ['uaibot.Ball', 'uaibot.Box', 'uaibot.Cylinder', 'uaibot.ConvexPolytope']
-    #
-    # IS_METRIC = ['uaibot.Ball', 'uaibot.Box', 'uaibot.Cylinder', 'uaibot.PointCloud', 'uaibot.ConvexPolytope']
-    #
-    # IS_GROUPABLE = ['uaibot.Ball', 'uaibot.Box', 'uaibot.Cylinder', 'uaibot.ConvexPolytope', 'uaibot.Frame',
-    #                 'uaibot.RigidObject', 'uaibot.Group', 'uaibot.Robot', 'uaibot.PointLight']
-    #
-    # IS_OBJ_SIM = ['uaibot.Ball', 'uaibot.Box', 'uaibot.Cylinder', 'uaibot.ConvexPolytope', 'uaibot.Robot',
-    #               'uaibot.PointLight', 'uaibot.Frame', 'uaibot.PointCloud', 'uaibot.Arrow',
-    #               'uaibot.RigidObject', 'uaibot.Group', 'uaibot.HTMLDiv']
-    #
+Numeric predicates check real numeric types; NaN/infinity remain floats.
+Vectors are nonempty (n,), (n,1) or (1,n); matrices are exactly 2-D.
+"""
+
+import string as _string
+import numpy as np
+from ._arrays import is_integral, is_real_number, real_array
+from .types import (
+    Groupable,
+    Metric,
+    ObjSim,
+    Simple,
+    UaibotObject,
+    _registered_uaibot_name,
+)
+
+__all__ = [
+    "is_a_number",
+    "is_a_natural_number",
+    "is_a_matrix",
+    "is_a_vector",
+    "is_a_list_vector",
+    "is_a_pd_matrix",
+    "is_a_color",
+    "is_a_name",
+    "get_uaibot_type",
+    "is_a_simple_object",
+    "is_a_metric_object",
+    "is_a_groupable_object",
+    "is_a_obj_sim",
+    "IS_SIMPLE",
+    "IS_METRIC",
+    "IS_GROUPABLE",
+    "IS_OBJ_SIM",
+    "UAIBOT_NAME_TYPES",
+]
+
+# Compatibility category names now hold classes, not class-name strings.
+IS_SIMPLE = (Simple,)
+IS_METRIC = (Metric,)
+IS_GROUPABLE = (Groupable,)
+IS_OBJ_SIM = (ObjSim,)
+UAIBOT_NAME_TYPES = (UaibotObject,)
+
 
 def is_a_number(obj):
-    """
-    Check if the argument is a float or int number
-
-    Parameters
-    ----------
-    obj: object
-        Object to be verified.
-
-    Returns
-    -------
-    is_type: boolean
-        If the object is of the type.
-    """
-
-    return str(type(obj)) in [
-        "<class 'int'>",
-        "<class 'float'>",
-        "<class 'numpy.float64'>",
-    ]
+    """A Python/NumPy real scalar, excluding bool and complex."""
+    return is_real_number(obj)
 
 
 def is_a_natural_number(obj):
-    """
-    Check if the argument is a natural number (integer and >=0)
+    """A Python/NumPy integer >= 0; booleans are not integers here."""
+    return bool(is_integral(obj) and obj >= 0)
 
-    Parameters
-    ----------
-    obj: object
-        Object to be verified.
 
-    Returns
-    -------
-    is_type: boolean
-        If the object is of the type.
-    """
-
-    return str(type(obj)) == "<class 'int'>" and obj >= 0
+def _valid_dimension(n):
+    return n is None or (is_integral(n) and n > 0)
 
 
 def is_a_matrix(obj, n=None, m=None):
+    """Check nonempty real 2-D data, optionally of shape (n,m).
+
+    Accept lists, tuples, ndarray and np.matrix. Reject bool/string/complex/
+    object data, ragged sequences and nonpositive/nonintegral dimensions.
     """
-    Check if the argument is an n x m matrix of integers or floats.
-
-    Parameters
-    ----------
-    obj: object
-        Object to be verified.
-
-    n: positive int
-        Number of rows
-        (default: it does not matter).
-
-    m: positive int
-        Number of columns
-        (default: it does not matter).
-
-    Returns
-    -------
-    is_type: boolean
-        If the object is of the type.
-    """
-
-    # Check if obj is a numpy array or matrix
-    if isinstance(obj, (np.ndarray, np.matrix)):
-        # Check shape if dimensions are provided
-
-        shp = np.shape(obj)
-        rows = shp[0]
-        cols = shp[1] if len(shp) > 1 else 1
-
-        if ((n is not None) and (rows != n)) or ((m is not None) and (cols != m)):
-            return False
-
-        # Ensure all elements are integers or floats
-        return np.issubdtype(obj.dtype, np.floating) or np.issubdtype(
-            obj.dtype, np.integer
-        )
-
-    # Check if obj is a list (and therefore could represent a matrix)
-    if isinstance(obj, list):
-        try:
-            return is_a_matrix(np.matrix(obj), n, m)
-        except:
-            return False
+    if not (_valid_dimension(n) and _valid_dimension(m)):
+        return False
+    array = real_array(obj)
+    return bool(
+        array is not None
+        and array.ndim == 2
+        and array.size > 0
+        and (n is None or array.shape[0] == n)
+        and (m is None or array.shape[1] == m)
+    )
 
 
 def is_a_vector(obj, n=None):
-    """
-    Check if the argument is a vector of floats.
-    A vector is very flexible. For example, a 3D vector (is_a_vector(x,3)) can be:
-    x1 = [0,1,2]
-    x2 = [[0],[1],[2]]
-    x3 = (0,1,2)
-    x4 = np.matrix([0,1,2])
-    x5 = np.matrix([[0],[1],[2]])
-    x6 = np.array([0,1,2])
-    x7 = np.array([[0],[1],[2]])
-
-    Parameters
-    ----------
-    obj: object
-        Object to be verified.
-
-    n: positive int
-        Check if the vector is n-dimensional. If 'None', it does not matter.
-        (default: 'None').
-
-    Returns
-    -------
-    is_type: boolean
-        If the object is of the type.
-    """
-    try:
-        p = cvt(obj)
-        if n is None:
-            return np.shape(p)[1] == 1
-        else:
-            return (np.shape(p)[0] == n) and (np.shape(p)[1] == 1)
-    except:
+    """Check a nonempty real flat, row or column vector, optionally length n."""
+    if not _valid_dimension(n):
         return False
+    array = real_array(obj)
+    if array is None or array.size == 0:
+        return False
+    shape_ok = array.ndim == 1 or (array.ndim == 2 and 1 in array.shape)
+    return bool(shape_ok and (n is None or array.size == n))
 
 
 def is_a_list_vector(obj, n=None):
+    """A nonempty list/tuple/array of vectors with equal dimension.
+
+    For a 2-D array, entries are rows. Iterators are not consumed.
     """
-    Check if the argument is a list of vector of floats with the same dimension.
-
-    Parameters
-    ----------
-    obj: object
-        Object to be verified.
-
-    n: positive int
-        Check if all the vectors are n-dimensional. If 'None', it does not matter,
-        as long as they are equal.
-        (default: 'None').
-
-    Returns
-    -------
-    is_type: boolean
-        If the object is of the type.
-    """
-
-    if n is None:
-        try:
-            n_common = np.shape(cvt(obj[0]))[0]
-        except:
-            return False
-    else:
-        n_common = n
-
-    for p in obj:
-        if not is_a_vector(p, n_common):
-            return False
-
-    return True
+    if not _valid_dimension(n) or not isinstance(obj, (list, tuple, np.ndarray)):
+        return False
+    if isinstance(obj, np.ndarray) and obj.ndim == 0:
+        return False
+    if len(obj) == 0 or not is_a_vector(obj[0], n):
+        return False
+    dimension = real_array(obj[0]).size if n is None else n
+    return all(is_a_vector(item, dimension) for item in obj)
 
 
 def is_a_pd_matrix(obj, n=None):
+    """A finite symmetric strictly positive-definite square matrix.
+
+    Singular PSD matrices fail, as in the original Cholesky implementation.
+    Symmetry uses the existing rtol=1e-5, atol=1e-8 tolerances.
     """
-    Check if the argument is a symmetric nxn positive (semi)-definite matrix.
-
-    Parameters
-    ----------
-    obj: object
-        Object to be verified.
-
-    n: positive int
-        Dimension of the square matrix
-        (default: it does not matter).
-
-    Returns
-    -------
-    is_type: boolean
-        If the object is of the type.
-    """
-    value = is_a_matrix(obj, n, n)
-
-    if value:
-        value = np.allclose(obj, np.transpose(obj), rtol=1e-05, atol=1e-08)
-
-    if value:
-        try:
-            np.linalg.cholesky(obj)
-        except:
-            value = False
-
-    return value
+    if not is_a_matrix(obj, n, n):
+        return False
+    array = real_array(obj)
+    if array.shape[0] != array.shape[1] or not np.isfinite(array).all():
+        return False
+    try:
+        with np.errstate(over="ignore", invalid="ignore"):
+            array = np.asarray(array, dtype=np.float64)
+        if not np.isfinite(array).all() or not np.allclose(
+            array, array.T, rtol=1.0e-5, atol=1.0e-8
+        ):
+            return False
+        np.linalg.cholesky(0.5 * array + 0.5 * array.T)
+    except (TypeError, ValueError, OverflowError, np.linalg.LinAlgError):
+        return False
+    return True
 
 
 def is_a_color(obj):
-    """
-    Check if the argument is a HTML-compatible string that represents a color.
-
-    Parameters
-    ----------
-    obj: object
-        Object to be verified.
-
-    Returns
-    -------
-    is_type: boolean
-        If the object is of the type.
-    """
+    """A colour.Color-compatible string; needs colour only for string inputs."""
+    if not isinstance(obj, str):
+        return False
+    from colour import Color
 
     try:
-        obj = obj.replace(" ", "")
-        Color(obj)
-        return True
-    except:
+        Color(obj.replace(" ", ""))
+    except (TypeError, ValueError, AttributeError):
         return False
+    return True
 
 
 def is_a_name(string):
-    """
-    Check if the argument is a valid name for uaibot objects.
-    Only characters [a-z], [A-z], [0-9] and '_' are allowed.
-    However, variables should not begin with numbers.
-
-    Parameters
-    ----------
-    string: string
-        Name to be verified.
-
-    Returns
-    -------
-    is_name: boolean
-        If the name is a valid name.
-    """
-
-    if str(type(string)) == "<class 'str'>":
-        if string == "":
-            return True
-        else:
-            allowed1 = set(st.ascii_lowercase + st.ascii_uppercase + st.digits + "_")
-            allowed2 = set(st.ascii_lowercase + st.ascii_uppercase + "_")
-
-            return (set(string) <= allowed1) and (set(string[0]) <= allowed2)
-    else:
+    """ASCII letters/digits/underscore, no leading digit; empty is valid."""
+    if not isinstance(string, str):
         return False
+    if string == "":
+        return True
+    first = _string.ascii_letters + "_"
+    return string[0] in first and all(c in first + _string.digits for c in string)
 
 
 def get_uaibot_type(obj):
+    """Legacy display label or ''. Membership uses ABC/class identity.
+
+    Registered subclasses inherit their nearest registered ancestor's label.
+    Other UaibotObject descendants use their own class name for display only.
+    Algorithms must use ABCs/dispatch rather than comparing these labels.
     """
-    Return the UAIBot type of the object.
-    Return the empty string if it is not an UAIBot object.
-
-    Parameters
-    ----------
-    obj: object
-        Object to be verified.
-
-    Returns
-    -------
-    obj_type: string
-        UAIBot type.
-    """
-    type_str = str(type(obj))
-
-    ind = -1
-    k = 0
-    while ind == -1 and k < len(Utils.UAIBOT_NAME_TYPES):
-        ind = type_str.find(Utils.UAIBOT_NAME_TYPES[k])
-        k += 1
-
-    if ind == -1:
-        return ""
-    else:
-        ind1 = type_str.rfind(".")
-        ind2 = type_str.rfind(">")
-        return "uaibot." + type_str[ind1 + 1 : ind2 - 1]
+    name = _registered_uaibot_name(type(obj))
+    if name is not None:
+        return name
+    if isinstance(obj, UaibotObject):
+        return "uaibot." + type(obj).__name__
+    return ""
 
 
 def is_a_simple_object(obj):
-    """
-    Check if the argument is a simple object.
-    Check the constant 'Utils.IS_SIMPLE' for a list of simple objects.
-
-    Parameters
-    ----------
-    obj: object
-        Object to be verified.
-
-    Returns
-    -------
-    is_type: boolean
-        If the object is of the type.
-    """
     return isinstance(obj, Simple)
 
 
 def is_a_metric_object(obj):
-    """
-    Check if the argument is a metric object (if distance can be computed).
-    Check the constant 'Utils.IS_METRIC' for a list of metric objects.
-
-    Parameters
-    ----------
-    obj: object
-        Object to be verified.
-
-    Returns
-    -------
-    is_type: boolean
-        If the object is of the type.
-    """
     return isinstance(obj, Metric)
 
 
 def is_a_groupable_object(obj):
-    """
-    Check if the argument is a groupable object.
-    Check the constant 'Utils.IS_GROUPABLE' for a list of groupable objects.
-
-    Parameters
-    ----------
-    obj: object
-        Object to be verified.
-
-    Returns
-    -------
-    is_type: boolean
-        If the object is of the type.
-    """
     return isinstance(obj, Groupable)
 
 
 def is_a_obj_sim(obj):
-    """
-    Check if the argument is an object that can be put into the simulator.
-    Check the constant 'Utils.IS_OBJ_SIM' for a list of objects that can be put in the simulator.
-
-    Parameters
-    ----------
-    obj: object
-        Object to be verified.
-
-    Returns
-    -------
-    is_type: boolean
-        If the object is of the type.
-    """
     return isinstance(obj, ObjSim)

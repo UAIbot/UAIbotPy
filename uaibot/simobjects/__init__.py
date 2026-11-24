@@ -9,3 +9,4 @@ from .pointcloud import *
 from .pointlight import *
 from .rigidobject import *
 from .arrow import *
+from .curve import Curve, CurveSE3

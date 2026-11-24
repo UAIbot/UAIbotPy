@@ -1,12 +1,19 @@
-import os
-import quadprog
 import numpy as np
 from typing import Optional
 from .types import Matrix, Vector
 from .basic import cvt
+from ._arrays import real_array
+from ._backends import get_backend
 
-if os.environ["CPP_SO_FOUND"] == "1":
-    import uaibot_cpp_bind as ub_cpp
+
+def _matrix(value):
+    """Preserve 2-D shape; cvt intentionally normalizes vectors to columns."""
+    array = real_array(value)
+    if array is None or array.ndim not in (1, 2) or array.size == 0:
+        raise TypeError("Entry is not a valid real matrix")
+    return np.matrix(
+        array.reshape(-1, 1) if array.ndim == 1 else array, dtype=np.float64, copy=True
+    )
 
 
 def dp_inv(A: Matrix, eps: float = 0.001) -> np.matrix:
@@ -27,7 +34,7 @@ def dp_inv(A: Matrix, eps: float = 0.001) -> np.matrix:
     pinvA: mxn numpy array
         The damped pseudoinverse of 'mat'.
     """
-    A_int = cvt(A)
+    A_int = _matrix(A)
     n = np.shape(A_int)[1]
     return np.linalg.inv(A_int.T * A_int + eps * np.identity(n)) * A_int.T
 
@@ -38,6 +45,9 @@ def dp_inv_solve(
     """
     Solve the problem of minimizing ||A*x-b||^2 + eps*||x||^2
     It is the same as dp_inv(A,eps)*b, but faster
+
+    mode='python' never imports the extension. 'cpp'/'c++' requires it;
+    'auto' prefers an importable extension and otherwise falls back to Python.
 
     Parameters
     ----------
@@ -57,14 +67,13 @@ def dp_inv_solve(
         The solution to the optimization problem.
     """
 
-    if mode == "c++" and os.environ["CPP_SO_FOUND"] == "0":
-        raise Exception("c++ mode is set, but .so file was not loaded!")
+    backend = get_backend(mode)
 
-    A_cvt = cvt(A)
+    A_cvt = _matrix(A)
     b_cvt = cvt(b)
     n, m = A_cvt.shape
 
-    if mode == "python" or (mode == "auto" and os.environ["CPP_SO_FOUND"] == "0"):
+    if backend is None:
 
         M = np.block([[eps * np.eye(m), -A_cvt.T], [A_cvt, np.eye(n)]])
 
@@ -73,7 +82,7 @@ def dp_inv_solve(
 
         return cvt(solution[:m])
     else:
-        return cvt(ub_cpp.dp_inv_solve(A_cvt, b_cvt, eps))
+        return cvt(backend.dp_inv_solve(A_cvt, b_cvt, eps))
 
 
 def solve_qp(
@@ -115,9 +124,9 @@ def solve_qp(
     """
 
     if (A is None) and (A_eq is None):
-        return -np.linalg.inv(cvt(H)) * (cvt(f))
+        return -np.linalg.inv(_matrix(H)) * (cvt(f))
 
-    H_cvt = np.matrix(H, dtype=np.float64)
+    H_cvt = _matrix(H)
     H_cvt = 0.5 * (H_cvt + H_cvt.T)  # Ensure symmetry
     f_cvt = np.array(np.asarray(f).reshape((-1,)), dtype=np.float64)
 
@@ -126,7 +135,7 @@ def solve_qp(
         A_ineq = np.empty((0, H_cvt.shape[0]))
         b_ineq = np.empty((0,))
     else:
-        A_ineq = np.matrix(A, dtype=np.float64)
+        A_ineq = _matrix(A)
         b_ineq = np.array(np.asarray(b).reshape((-1,)), dtype=np.float64)
 
     # Handle empty A_eq and b_eq
@@ -134,13 +143,15 @@ def solve_qp(
         A_eq_cvt = np.empty((0, H_cvt.shape[0]))
         b_eq_cvt = np.empty((0,))
     else:
-        A_eq_cvt = np.matrix(A_eq, dtype=np.float64)
+        A_eq_cvt = _matrix(A_eq)
         b_eq_cvt = np.array(np.asarray(b_eq).reshape((-1,)), dtype=np.float64)
 
     # Stack constraints and compute meq
     G = np.vstack([A_eq_cvt, A_ineq])
     h = np.hstack([b_eq_cvt, b_ineq])
     meq = A_eq_cvt.shape[0]
+
+    import quadprog  # Optional dependency; only needed for constrained QPs.
 
     result = quadprog.solve_qp(H_cvt, -f_cvt, G.T, h, meq)
     return cvt(result[0])
@@ -160,4 +171,16 @@ def null_space(A: Matrix) -> np.matrix:
     A_null : m x r numpy matrix
         The matrix such that its column spam the null space.
     """
-    return np.matrix(null_space(cvt(A)))
+    array = real_array(A)
+    if array is None or array.ndim != 2:
+        raise TypeError("A must be a real 2-D matrix")
+    _, singular, vh = np.linalg.svd(
+        np.asarray(array, dtype=np.float64), full_matrices=True
+    )
+    tolerance = (
+        singular[0] * max(array.shape) * np.finfo(np.float64).eps
+        if singular.size
+        else 0.0
+    )
+    rank = np.count_nonzero(singular > tolerance)
+    return np.matrix(vh[rank:].T, copy=True)

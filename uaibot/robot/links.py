@@ -1,6 +1,8 @@
 import numpy as np
-from uaibot.utils import *
-from uaibot.graphics.model3d import *
+from uaibot.utils import Utils
+from uaibot.graphics.model3d import Model3D
+
+__all__ = ["Link"]
 
 
 class Link:
@@ -90,7 +92,7 @@ class Link:
     def __init__(self, joint_number, theta, d, alpha, a, joint_type, list_model_3d, show_frame=False):
 
         # Error handling
-        if str(type(joint_number)) != "<class 'int'>" or joint_number < 0:
+        if not Utils.is_a_natural_number(joint_number):
             raise Exception("The 'joint_number' parameter should be a nonnegative integer.")
 
         if not Utils.is_a_number(theta):
@@ -108,15 +110,15 @@ class Link:
         if joint_type != 0 and joint_type != 1:
             raise Exception("The 'joint_type' parameter should be either '0' (rotative) or '1' (prismatic).")
 
-        if not (str(type(list_model_3d)) == "<class 'list'>"):
+        if not isinstance(list_model_3d, list):
             raise Exception("The parameter 'list_model_3d' should be a list of 'uaibot.Model3D' objects.")
         else:
             for i in range(len(list_model_3d)):
-                if not (Utils.get_uaibot_type(list_model_3d[i]) == "uaibot.Model3D"):
+                if not isinstance(list_model_3d[i], Model3D):
                     raise Exception(
                         "The parameter 'list_model_3d' should be a list of 'uaibot.Model3D' objects.")
 
-        if not str(type(show_frame)) == "<class 'bool'>":
+        if not isinstance(show_frame, bool):
             raise Exception("The parameter 'show_frame' should be a boolean.")
 
         # Code
@@ -202,3 +204,4 @@ class Link:
         string += "model3d: object3d_" + name_link + "_list}; \n \n"
 
         return string
+
