@@ -1,9 +1,11 @@
-import os
 import numpy as np
 from typing import Optional, List, Tuple
 from math import exp
 from .basic import cvt
 from .types import Vector, MetricObject
+from .typecheck import is_a_number, is_a_natural_number, is_a_vector, is_a_metric_object
+from ._backends import get_backend
+from ._cpp import GeometryKind, get_cpp_kind, is_a_cpp_object, obj_to_cpp
 
 
 def softmin(x: List[float], h: float) -> float:
@@ -71,14 +73,16 @@ def _compute_dist_python(
     while (not converged) and i < no_iter_max:
         p_a_ant = p_a
         p_b, _ = obj_b.projection(p_a)
+        p_b = cvt(p_b)
         p_a, _ = obj_a.projection(p_b)
+        p_a = cvt(p_a)
         hist_error.append(np.linalg.norm(p_a - p_a_ant))
         converged = hist_error[-1] < tol
         i += 1
 
     dist = np.linalg.norm(p_a - p_b)
 
-    return p_a, p_b, dist, []
+    return p_a, p_b, dist, hist_error
 
 
 def compute_dist(
@@ -91,174 +95,81 @@ def compute_dist(
     eps: float = 0,
     mode: str = "auto",
 ) -> Tuple[np.matrix, np.matrix, float, List]:
-    """
-    Compute Euclidean distance or differentiable distance between two objects.
+    """Compute closest points and distance using the user-selected backend.
 
-    If h>0 or eps > 0, it computes the Euclidean distance and it uses GJK's algorithm.
+    mode='python' uses alternating projections and NEVER loads C++. mode='cpp'
+    (or the legacy 'c++') requires the extension. 'auto' prefers an importable
+    extension and otherwise uses Python. No CPP_SO_FOUND variable is needed.
 
-    Else, it computes the differentiable distance through Generalized Alternating Projection (GAP).
-    See the paper 'A Differentiable Distance Metric for Robotics Through Generalized Alternating Projection'.
-    This only works in c++ mode, though.
-
-
-    Parameters
-    ----------
-    obj_a : an object of type 'MetricObject' (see Utils.IS_METRIC)
-        The first object.
-
-    obj_b : an object of type 'MetricObject' (see Utils.IS_METRIC)
-        The second object.
-
-    p_a_init : a 3D vector (3-element list/tuple, (3,1)/(1,3)/(3,)-shaped numpy matrix/numpy array) or None
-        Initial point for closest point in 'obj_a'. If 'None', is set to random.
-        (default: None).
-
-    tol : positive float
-        Convergence criterion of GAP: it stops when ||a[k+1]-a[k]|| < tol.
-        Only valid when h > 0 or eps > 0.
-        (default: 0.001m).
-
-    no_iter_max : positive int
-        Maximum number of iterations of GAP.
-        Only valid when h > 0 or eps > 0.
-        (default: 20 iterations).
-
-    h : nonnegative float
-        h parameter in the generalized distance function.
-        If h=0 and eps=0, it is simply the Euclidean distance.
-        (default: 0).
-
-    eps : nonnegative float
-        h parameter in the generalized distance function.
-        If h=0 and eps=0, it is simply the Euclidean distance.
-        (default: 0).
-
-    mode : string
-    'c++' for the c++ implementation, 'python' for the python implementation
-    and 'auto' for automatic ('c++' is available, else 'python').
-    (default: 'auto').
-
-    Returns
-    -------
-    point_a : 3 x 1 numpy matrix
-        Closest point (Euclidean or differentiable) in obj_a.
-
-    point_b : 3 x 1 numpy matrix
-        Closest point (Euclidean or differentiable) in obj_b.
-
-    distance : float
-        Euclidean or differentiable distance.
-
-    hist_error: list of floats
-        History of convergence error.
-
+    Python requires Metric objects supporting projection, excludes registered
+    point clouds, and requires h=eps=0. C++ accepts Metric objects with registered
+    converters or native CPP_GeometricPrimitives. Nonzero h/eps request the
+    backend's differentiable distance. Returns (point_a, point_b, distance,
+    convergence_history), with points as 3-by-1 legacy NumPy matrices.
     """
 
-    if mode == "python" or (mode == "auto" and os.environ["CPP_SO_FOUND"] == "0"):
-        if (
-            Utils.get_uaibot_type(obj_a) == "uaibot.PointCloud"
-            or Utils.get_uaibot_type(obj_b) == "uaibot.PointCloud"
-        ):
-            raise Exception("Point cloud distance is not supported in Python mode!")
+    def scalar(value, label, positive):
+        message = label + (
+            " must be positive and finite"
+            if positive
+            else " must be nonnegative and finite"
+        )
+        if not is_a_number(value):
+            raise ValueError(message)
+        try:
+            value = float(value)
+        except (OverflowError, TypeError, ValueError) as exc:
+            raise ValueError(message) from exc
+        if not np.isfinite(value) or (value <= 0 if positive else value < 0):
+            raise ValueError(message)
+        return value
 
-        if not Utils.is_a_metric_object(obj_a):
-            raise Exception(
-                "In python mode, the parameter 'obj_a' must be one of the following: "
-                + str(Utils.IS_METRIC)
-                + "."
-            )
-
-        if not Utils.is_a_metric_object(obj_b):
-            raise Exception(
-                "In python mode, the parameter 'obj_b' must be one of the following: "
-                + str(Utils.IS_METRIC)
-                + "."
-            )
-
-    if mode == "c++":
-        if not (
-            Utils.get_uaibot_type(obj_a) == "uaibot.CPP_GeometricPrimitives"
-            or Utils.is_a_metric_object(obj_a)
-        ):
-            raise Exception(
-                "In c++ mode, the parameter 'obj_a' must be 'uaibot.CPP_GeometricPrimitives' or "
-                + str(Utils.IS_METRIC)
-                + "."
-            )
-        if not (
-            Utils.get_uaibot_type(obj_b) == "uaibot.CPP_GeometricPrimitives"
-            or Utils.is_a_metric_object(obj_b)
-        ):
-            raise Exception(
-                "In c++ mode, the parameter 'obj_b' must be 'uaibot.CPP_GeometricPrimitives' or "
-                + str(Utils.IS_METRIC)
-                + "."
-            )
-
-    if (mode == "c++") or (mode == "auto" and os.environ["CPP_SO_FOUND"] == "1"):
-        if Utils.is_a_metric_object(obj_a):
-            obj_a_cpp = obj_a.cpp_obj
-        else:
-            obj_a_cpp = obj_a
-
-        if Utils.is_a_metric_object(obj_b):
-            obj_b_cpp = obj_b.cpp_obj
-        else:
-            obj_b_cpp = obj_b
-
-    if p_a_init is None:
-        if (
-            (mode == "c++") or (mode == "auto" and os.environ["CPP_SO_FOUND"] == "1")
-        ) and h >= 1e-5:
-            dist_res = obj_a_cpp.dist_to(
-                obj_b_cpp,
-                0.0,
-                0.0,
-                tol,
-                no_iter_max,
-                np.matrix([0, 0, 0]).reshape((3, 1)),
-            )
-            p_a = Utils.cvt(dist_res.proj_A)
-        else:
-            p_a = Utils.cvt(np.random.uniform(-3, 3, size=(3,)))
+    tol, h, eps = (
+        scalar(tol, "tol", True),
+        scalar(h, "h", False),
+        scalar(eps, "eps", False),
+    )
+    if not is_a_natural_number(no_iter_max) or no_iter_max == 0:
+        raise ValueError("no_iter_max must be a positive integer")
+    no_iter_max = int(no_iter_max)
+    if p_a_init is not None:
+        if not is_a_vector(p_a_init, 3) or not np.isfinite(np.asarray(p_a_init)).all():
+            raise ValueError("p_a_init must be a finite 3-D vector or None")
+        p_a = cvt(p_a_init)
     else:
-        p_a = Utils.cvt(p_a_init)
+        p_a = None
 
-    if not (p_a_init is None or Utils.is_a_vector(p_a_init, 3)):
-        raise Exception(
-            "The optional parameter 'p_a_init' must be a 3D vector or 'None'."
-        )
-
-    if not Utils.is_a_number(tol) or tol <= 0:
-        raise Exception("The optional parameter 'tol' must be a nonnegative number.")
-
-    if not Utils.is_a_natural_number(no_iter_max):
-        raise Exception(
-            "The optional parameter 'no_iter_max' must be a nonnegative integer."
-        )
-
-    if not Utils.is_a_number(h) or h < 0:
-        raise Exception("The optional parameter 'h' must be a nonnegative number.")
-
-    if not Utils.is_a_number(eps) or eps < 0:
-        raise Exception("The optional parameter 'eps' must be a nonnegative number.")
-
-    if mode == "c++" and os.environ["CPP_SO_FOUND"] == "0":
-        raise Exception("c++ mode is set, but .so file was not loaded!")
-    # end error handling
-
-    if mode == "python" or (mode == "auto" and os.environ["CPP_SO_FOUND"] == "0"):
-        if h > 0 or eps > 0:
-            raise Exception(
-                "In Python mode, smoothing parameters 'h' and 'eps' must be set to 0!"
+    backend = get_backend(mode)
+    if backend is None:
+        if not (is_a_metric_object(obj_a) and is_a_metric_object(obj_b)):
+            raise TypeError("Python distance requires two Metric objects")
+        if any(get_cpp_kind(obj) is GeometryKind.POINT_CLOUD for obj in (obj_a, obj_b)):
+            raise NotImplementedError(
+                "Point-cloud distance is not supported by the Python implementation"
             )
+        if h != 0 or eps != 0:
+            raise ValueError(
+                "Python distance requires h=eps=0; select mode='cpp' for smoothing"
+            )
+        if p_a is None:
+            p_a = cvt(np.random.uniform(-3, 3, size=3))
+        return _compute_dist_python(obj_a, obj_b, p_a, tol, no_iter_max)
 
-        return Utils._compute_dist_python(obj_a, obj_b, p_a, tol, no_iter_max)
-    else:
-        dist_res = obj_a_cpp.dist_to(obj_b_cpp, h, eps, tol, no_iter_max, p_a)
-        return (
-            Utils.cvt(dist_res.proj_A),
-            Utils.cvt(dist_res.proj_B),
-            dist_res.dist,
-            dist_res.hist_error,
-        )
+    def native(obj):
+        if is_a_cpp_object(obj, backend=backend):
+            return obj
+        if not is_a_metric_object(obj):
+            raise TypeError("C++ distance requires Metric or native primitive objects")
+        return obj_to_cpp(obj)
+
+    obj_a_cpp, obj_b_cpp = native(obj_a), native(obj_b)
+    if p_a is None:
+        if h >= 1.0e-5:
+            seed = obj_a_cpp.dist_to(
+                obj_b_cpp, 0.0, 0.0, tol, no_iter_max, cvt([0.0, 0.0, 0.0])
+            )
+            p_a = cvt(seed.proj_A)
+        else:
+            p_a = cvt(np.random.uniform(-3, 3, size=3))
+    result = obj_a_cpp.dist_to(obj_b_cpp, h, eps, tol, no_iter_max, p_a)
+    return cvt(result.proj_A), cvt(result.proj_B), result.dist, result.hist_error

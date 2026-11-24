@@ -1,11 +1,12 @@
 import numpy as np
 from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject
 from typing import Optional, Tuple, List
-from .robot import *
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .robot import Robot
+
+__all__ = ["DistStructRobotAuto", "DistStructLinkLink"]
     
 class DistStructLinkLink:
 

@@ -4,11 +4,8 @@ from uaibot.simobjects.cylinder import *
 from uaibot.graphics.meshmaterial import *
 from uaibot.utils import *
 import numpy as np
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Union
 from uaibot.utils.types import Groupable
-
-GroupableObject: TypeAlias = Union["Ball", "Box", "Cylinder", "ConvexPolytope", "Frame",
-                    "RigidObject", "Group", "Robot", "PointLight"]
 
 
 class Frame(Groupable):

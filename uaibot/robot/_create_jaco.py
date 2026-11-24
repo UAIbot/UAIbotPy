@@ -5,7 +5,6 @@ from uaibot.graphics.meshmaterial import MeshMaterial
 from uaibot.graphics.model3d import Model3D
 from uaibot.simobjects.rigidobject import RigidObject
 from uaibot.simobjects.pointlight import PointLight
-from uaibot.simulation import Simulation
 from uaibot.simobjects.frame import Frame
 import numpy as np
 

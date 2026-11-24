@@ -102,7 +102,9 @@ class CustomDevelop(develop):
 
 #Setup the installation
 setup(
-    ext_modules=[CMakeExtension("uaibot.uaibot_cpp_bind", sourcedir="uaibot/c_implementation")],
+    # [TODO] After major refactor of uaibot, we must use cpp_bind as a private module
+    # ext_modules=[CMakeExtension("uaibot.uaibot_cpp_bind", sourcedir="uaibot/c_implementation")],
+    ext_modules=[CMakeExtension("uaibot_cpp_bind", sourcedir="uaibot/c_implementation")],
     cmdclass={
         "build_ext": CMakeBuild,
         "install": CustomInstall,

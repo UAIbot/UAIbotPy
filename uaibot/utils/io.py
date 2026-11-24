@@ -1,5 +1,4 @@
 import sys
-import httplib2
 
 
 def url_modified(url, port):
@@ -33,7 +32,7 @@ def is_url_available(url, types):
         Message.
     """
 
-    if not (str(type(url)) == "<class 'str'>"):
+    if not isinstance(url, str):
         return " is not a valid url"
 
     ind = url.rfind(".")
@@ -43,6 +42,8 @@ def is_url_available(url, types):
         return " must be an file of the types: '" + str(types) + "'"
 
     try:
+        import httplib2
+
         h = httplib2.Http(disable_ssl_certificate_validation=True)  # Change this later
         resp = h.request(url, "HEAD")
         if int(resp[0]["status"]) < 400:

@@ -2,30 +2,17 @@ import numpy as np
 from typing import Tuple
 from .types import Matrix, Vector, HTMatrix
 from math import cos, sin, acos, sqrt
+from ._arrays import real_array
 
 
 def cvt(input: Matrix) -> np.matrix:
-    if isinstance(input, list) or isinstance(input, tuple):
-        if all(isinstance(x, (int, float)) for x in input):
-            return np.matrix(input, dtype=np.float64).reshape(-1, 1)
-        elif all(isinstance(x, list) for x in input):
-            return np.matrix(input, dtype=np.float64)
-        else:
-            raise ValueError("Entry is not a valid matrix.")
-
-    elif isinstance(input, np.ndarray):
-        if input.ndim == 1:
-            return np.matrix(input.reshape(-1, 1), dtype=np.float64)
-        else:
-            if input.shape[1] > 1:
-                if input.shape[0] == 1:
-                    return np.matrix(input, dtype=np.float64).reshape(-1, 1)
-                else:
-                    return np.matrix(input, dtype=np.float64)
-            else:
-                return np.matrix(input, dtype=np.float64)
-    else:
+    """Convert real data; consistently normalize flat/row vectors to columns."""
+    array = real_array(input)
+    if array is None or array.ndim not in (1, 2) or array.size == 0:
         raise TypeError("Entry is not a valid matrix.")
+    if array.ndim == 1 or array.shape[0] == 1:
+        array = array.reshape(-1, 1)
+    return np.matrix(array, dtype=np.float64, copy=True)
 
 
 def S(v: Vector) -> np.matrix:
