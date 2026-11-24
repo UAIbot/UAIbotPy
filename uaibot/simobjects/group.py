@@ -1,9 +1,9 @@
 import numpy as np
-from utils import *
-from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject, GroupableObject
+from uaibot.utils import *
+from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject, GroupableObject, Groupable
 from typing import Optional, Tuple, List
 
-class Group:
+class Group(Groupable):
     """
    A group of other 'simobject' objects.
 

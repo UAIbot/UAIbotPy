@@ -1,14 +1,14 @@
 import os, sys
 
-currentdir = os.path.dirname(os.path.realpath(__file__))
-parentdir = os.path.dirname(currentdir)
-sys.path.append(parentdir)
+# currentdir = os.path.dirname(os.path.realpath(__file__))
+# parentdir = os.path.dirname(currentdir)
+# sys.path.append(parentdir)
 
 import numpy as np
-from utils import *
-from graphics.meshmaterial import *
-from simobjects.group import *
-from simobjects.frame import *
+from uaibot.utils import *
+from uaibot.graphics.meshmaterial import *
+from uaibot.simobjects.group import *
+from uaibot.simobjects.frame import *
 
 from ._set_ani_frame import _set_ani_frame
 from ._add_ani_frame import _add_ani_frame
@@ -73,11 +73,11 @@ if os.environ['CPP_SO_FOUND']=="1":
     import uaibot_cpp_bind as ub_cpp
     from ._to_cpp import _to_cpp
 
-from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject, GroupableObject
+from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject, GroupableObject, Groupable
 from typing import Optional, Tuple, List
 
 
-class Robot:
+class Robot(Groupable):
     """
   A class that contains a robot object in UAIBot.
 

@@ -1,4 +1,4 @@
-from utils import *
+from uaibot.utils import *
 
 
 def _add_col_object(self, sim):

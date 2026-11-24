@@ -1,4 +1,4 @@
-from utils import *
+from uaibot.utils import *
 import numpy as np
 import os
 
@@ -10,13 +10,13 @@ if TYPE_CHECKING:
     from uaibot.simobjects.pointcloud import PointCloud
     from uaibot.graphics.meshmaterial import MeshMaterial
     
-from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject
+from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject, Simple
 from typing import Optional, Tuple, List
 import os
 if os.environ['CPP_SO_FOUND']=="1":
     import uaibot_cpp_bind as ub_cpp
 
-class Box:
+class Box(Simple):
     """
   A box object.
 

@@ -1,5 +1,5 @@
 import numpy as np
-from utils import *
+from uaibot.utils import *
 import uaibot_cpp_bind as ub_cpp
 
 

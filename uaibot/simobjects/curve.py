@@ -1,9 +1,10 @@
 import numpy as np
 from uaibot.utils import Utils
-from uaibot.simobjects import Frame, Group
+from uaibot.simobjects import Frame
+from uaibot.utils.types import ObjSim
 
 
-class Curve:
+class Curve(ObjSim):
     """A dynamic point cloud that can change its shape over time by
     switching between discrete keyframes.
 
@@ -306,7 +307,7 @@ class Curve:
         return self
 
 
-class CurveSE3:
+class CurveSE3(ObjSim):
     """A curve in SE(3) that can change its configuration over time by
     switching between discrete keyframes.
 

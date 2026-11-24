@@ -2,15 +2,16 @@ from uaibot.simobjects.ball import *
 from uaibot.simobjects.group import *
 from uaibot.simobjects.cylinder import *
 from uaibot.graphics.meshmaterial import *
-from utils import *
+from uaibot.utils import *
 import numpy as np
 from typing import Optional, Tuple, List
+from uaibot.utils.types import Groupable
 
 GroupableObject: TypeAlias = Union["Ball", "Box", "Cylinder", "ConvexPolytope", "Frame",
                     "RigidObject", "Group", "Robot", "PointLight"]
 
 
-class Frame:
+class Frame(Groupable):
     """
   A frame object.
 

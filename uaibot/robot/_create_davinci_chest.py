@@ -1,8 +1,8 @@
-from utils import Utils
+from uaibot.utils import Utils
 
-from graphics.meshmaterial import MeshMaterial
-from graphics.model3d import Model3D
-from simobjects.rigidobject import RigidObject
+from uaibot.graphics.meshmaterial import MeshMaterial
+from uaibot.graphics.model3d import Model3D
+from uaibot.simobjects.rigidobject import RigidObject
 
 import numpy as np
 

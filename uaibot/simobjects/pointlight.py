@@ -1,9 +1,9 @@
 import numpy as np
-from utils import *
-from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject
+from uaibot.utils import *
+from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject, Groupable
 from typing import Optional, Tuple, List
 
-class PointLight:
+class PointLight(Groupable):
     """
    A point light.
 

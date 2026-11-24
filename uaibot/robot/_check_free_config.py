@@ -1,4 +1,4 @@
-from utils import *
+from uaibot.utils import *
 import numpy as np
 
 def _check_free_config(self, q=None, htm=None, obstacles=[],

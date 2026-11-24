@@ -1,4 +1,4 @@
-from utils import *
+from uaibot.utils import *
 
 
 def _attach_object(self, obj):

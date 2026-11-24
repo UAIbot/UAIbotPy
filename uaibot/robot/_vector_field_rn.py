@@ -1,6 +1,6 @@
 import numpy as np
 import os
-from utils import *
+from uaibot.utils import *
 
 import os
 if os.environ['CPP_SO_FOUND']=="1":

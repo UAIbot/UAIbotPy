@@ -1,4 +1,4 @@
-from utils import *
+from uaibot.utils import *
 import numpy as np
 import math
 from ._dist_struct_robot_obj import DistStructRobotObj

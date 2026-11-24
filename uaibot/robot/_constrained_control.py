@@ -1,6 +1,6 @@
-from utils import *
+from uaibot.utils import *
 import numpy as np
-from robot import *
+from uaibot.robot import *
 
 def funF(r):
     f = np.matrix(r)
