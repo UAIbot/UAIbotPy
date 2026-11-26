@@ -548,6 +548,9 @@ inline State step_open_loop(const Eigen::VectorXd& thrust_setpoints,
                   "setpoints must have eight finite entries");
   const auto m = detail::prepare(p);
   detail::validate_force_state(state, p);
+  const double end = state.time + p.dt;
+  detail::require(std::isfinite(end) && end > state.time,
+                  "dt is outside simulation clock resolution");
   if (p.measurement_noise.enabled)
     return detail::step_with_measurements(Vec6::Zero(), thrust_setpoints, false,
                                           state, p, m);
@@ -560,7 +563,7 @@ inline State step_open_loop(const Eigen::VectorXd& thrust_setpoints,
   return detail::finish(x, forces,
                         detail::diagnose(x, m.allocation * thrust_setpoints,
                                          setpoint, forces, p, m),
-                        state.time + p.dt);
+                        end);
 }
 
 // Main API. Return the entire State to the next call when motor lag is enabled.
@@ -573,6 +576,9 @@ inline State step(const Eigen::VectorXd& target_twist, const State& state,
                   "target twist must have six finite entries");
   const auto m = detail::prepare(p);
   detail::validate_force_state(state, p);
+  const double end = state.time + p.dt;
+  detail::require(std::isfinite(end) && end > state.time,
+                  "dt is outside simulation clock resolution");
   if (p.measurement_noise.enabled)
     return detail::step_with_measurements(target_twist, Vec8::Zero(), true,
                                           state, p, m);
@@ -605,7 +611,7 @@ inline State step(const Eigen::VectorXd& target_twist, const State& state,
   return detail::finish(x, forces,
                         detail::diagnose(x, requested_body, setpoint, forces, p,
                                          m, iterations, converged),
-                        state.time + p.dt);
+                        end);
 }
 
 // Requested stateless interface. No actuator memory is hidden in the

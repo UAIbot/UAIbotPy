@@ -1753,7 +1753,7 @@ void Manipulator::set_htm_extra(Matrix4f _htm_world_to_dh0,
   htm_dhn_to_ee = _htm_dhn_to_ee;
 }
 
-Manipulator::Manipulator() {};
+Manipulator::Manipulator() : Manipulator(0) {};
 
 vector<FKResult> Manipulator::fk(const vector<VectorXf>& q,
                                  const vector<Matrix4f>& htm_world_base,
