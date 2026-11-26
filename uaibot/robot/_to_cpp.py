@@ -1,31 +1,41 @@
-import numpy as np
-from utils import *
-import uaibot_cpp_bind as ub_cpp
+import uaibot_cpp_bind as cpp
+from uaibot.utils import obj_to_cpp
 
+
+class _CPPManipulator(cpp.CPP_Manipulator):
+    """Kinematics and collision interface with an optional native plant."""
+
+    dynamics = None
+
+    @property
+    def state(self):
+        return None if self.dynamics is None else self.dynamics.state
+
+    @property
+    def parameters(self):
+        return None if self.dynamics is None else self.dynamics.parameters
+
+
+def _set_joint_parameters(cpp_robot, links, limits):
+    for i, link in enumerate(links):
+        cpp_robot.set_joint_param(
+            i,
+            link.theta,
+            link.d,
+            link.alpha,
+            link.a,
+            int(link.joint_type),
+            limits[i, 0],
+            limits[i, 1],
+        )
 
 
 def _to_cpp(robot):
-
-    n = len(robot.links)
-
-    cpp_robot = ub_cpp.CPP_Manipulator(n)
-
+    links = robot.links
+    cpp_robot = _CPPManipulator(len(links))
     cpp_robot.set_htm_extra(robot.htm_base_0, robot.htm_n_eef)
-
-    for i in range(n):
-        cpp_robot.set_joint_param(i, robot.links[i].theta, robot.links[i].d, robot.links[i].alpha, robot.links[i].a, int(robot.links[i].joint_type), robot.joint_limit[i,0], robot.joint_limit[i,1])
-        for j in range(len(robot.links[i].col_objects)):
-            prim = robot.links[i].col_objects[j][0]
-            htm = robot.links[i].col_objects[j][1]
-            cpp_prim = Utils.obj_to_cpp(prim, htm)            
-            cpp_robot.add_geo_prim(i, cpp_prim)
-        
-    
+    _set_joint_parameters(cpp_robot, links, robot.joint_limit)
+    for i, link in enumerate(links):
+        for obj, local_pose in link.col_objects:
+            cpp_robot.add_geo_prim(i, obj_to_cpp(obj, local_pose))
     return cpp_robot
-
-
-
-
-
-
-

@@ -1,38 +1,41 @@
 import numpy as np
-from utils import *
-from graphics.model3d import *
+from weakref import WeakSet
+from uaibot.utils import Utils
+from uaibot.graphics.model3d import Model3D
+
+__all__ = ["Link"]
 
 
 class Link:
     """
-  A class that contains the information of the links of the robot.
+    A class that contains the information of the links of the robot.
 
 
-  Parameters
-  ----------
+    Parameters
+    ----------
 
-  joint_number : positive int
-      The joint number in the kinematic chain (0 is the first joint).
+    joint_number : positive int
+        The joint number in the kinematic chain (0 is the first joint).
 
-  theta : float
-      The 'theta' parameter in the Denavit-Hartenberg convention (rotation in z), in rad.
+    theta : float
+        The 'theta' parameter in the Denavit-Hartenberg convention (rotation in z), in rad.
 
-  d : float
-      The 'd' parameter in the Denavit-Hartenberg convention (displacement in z), in meters.
+    d : float
+        The 'd' parameter in the Denavit-Hartenberg convention (displacement in z), in meters.
 
-  alpha : float
-      The 'alpha' parameter in the Denavit-Hartenberg convention (rotation x), in rad.
+    alpha : float
+        The 'alpha' parameter in the Denavit-Hartenberg convention (rotation x), in rad.
 
-  a : float
-      The 'a' parameter in the Denavit-Hartenberg convention (displacement in x), in meters.
+    a : float
+        The 'a' parameter in the Denavit-Hartenberg convention (displacement in x), in meters.
 
-  joint_type : 0 or 1
-      The joint type. "0" is rotative and "1" is prismatic.
+    joint_type : 0 or 1
+        The joint type. "0" is rotative and "1" is prismatic.
 
-  list_model_3d : A list of 'uaibot.Model3D' objects
-      The 3d models that compose the links.
+    list_model_3d : A list of 'uaibot.Model3D' objects
+        The 3d models that compose the links.
 
-  """
+    """
 
     #######################################
     # Attributes
@@ -71,7 +74,7 @@ class Link:
     @property
     def col_objects(self):
         """Collection of objects that compose the collision model of the link."""
-        return self._col_objects
+        return [[obj, htm.copy()] for obj, htm in self._col_objects]
 
     @property
     def list_model_3d(self):
@@ -87,11 +90,23 @@ class Link:
     # Constructor
     #######################################
 
-    def __init__(self, joint_number, theta, d, alpha, a, joint_type, list_model_3d, show_frame=False):
+    def __init__(
+        self,
+        joint_number,
+        theta,
+        d,
+        alpha,
+        a,
+        joint_type,
+        list_model_3d,
+        show_frame=False,
+    ):
 
         # Error handling
-        if str(type(joint_number)) != "<class 'int'>" or joint_number < 0:
-            raise Exception("The 'joint_number' parameter should be a nonnegative integer.")
+        if not Utils.is_a_natural_number(joint_number):
+            raise Exception(
+                "The 'joint_number' parameter should be a nonnegative integer."
+            )
 
         if not Utils.is_a_number(theta):
             raise Exception("The 'theta' parameter should be a float.")
@@ -106,17 +121,22 @@ class Link:
             raise Exception("The 'a' parameter should be a float.")
 
         if joint_type != 0 and joint_type != 1:
-            raise Exception("The 'joint_type' parameter should be either '0' (rotative) or '1' (prismatic).")
+            raise Exception(
+                "The 'joint_type' parameter should be either '0' (rotative) or '1' (prismatic)."
+            )
 
-        if not (str(type(list_model_3d)) == "<class 'list'>"):
-            raise Exception("The parameter 'list_model_3d' should be a list of 'uaibot.Model3D' objects.")
+        if not isinstance(list_model_3d, list):
+            raise Exception(
+                "The parameter 'list_model_3d' should be a list of 'uaibot.Model3D' objects."
+            )
         else:
             for i in range(len(list_model_3d)):
-                if not (Utils.get_uaibot_type(list_model_3d[i]) == "uaibot.Model3D"):
+                if not isinstance(list_model_3d[i], Model3D):
                     raise Exception(
-                        "The parameter 'list_model_3d' should be a list of 'uaibot.Model3D' objects.")
+                        "The parameter 'list_model_3d' should be a list of 'uaibot.Model3D' objects."
+                    )
 
-        if not str(type(show_frame)) == "<class 'bool'>":
+        if not isinstance(show_frame, bool):
             raise Exception("The parameter 'show_frame' should be a boolean.")
 
         # Code
@@ -127,6 +147,7 @@ class Link:
         self._a = a
         self._joint_type = joint_type
         self._col_objects = []
+        self._collision_owners = WeakSet()
         self._list_model_3d = list_model_3d
         self._show_frame = show_frame
 
@@ -158,26 +179,40 @@ class Link:
 
     def attach_col_object(self, obj, htm):
         """
-    Attach an object (ball, box or cylinder) into the link as a collision
-    object.
-    
-    Parameters
-    ----------
-    obj: object
-        Object to be added.
+        Attach an object (ball, box or cylinder) into the link as a collision
+        object.
 
-    htm : 4x4 numpy array
-        The transformation between the link's HTM and the object's HTM
+        Parameters
+        ----------
+        obj: object
+            Object to be added.
 
-    """
+        htm : 4x4 numpy array
+            The transformation between the link's HTM and the object's HTM
+
+        """
 
         # Error handling
         if not Utils.is_a_matrix(htm, 4, 4):
-            raise Exception("The parameter 'htm' should be a 4x4 homogeneous transformation matrix.")
+            raise Exception(
+                "The parameter 'htm' should be a 4x4 homogeneous transformation matrix."
+            )
 
         if not (Utils.is_a_simple_object(obj)):
-            raise Exception("The parameter 'obj' must be one of the following types: " + str(Utils.IS_SIMPLE) + ".")
+            raise Exception(
+                "The parameter 'obj' must be one of the following types: "
+                + str(Utils.IS_SIMPLE)
+                + "."
+            )
 
+        htm = np.matrix(htm, dtype=float)
+        updates = [
+            owner._prepare_link_collision(self, obj, htm)
+            for owner in self._collision_owners
+        ]
+        for update in updates:
+            if update is not None:
+                update()
         self._col_objects.append([obj, htm])
 
     def gen_code(self, name, port):
@@ -188,8 +223,18 @@ class Link:
         string = "const object3d_" + name_link + "_list = [];\n\n"
 
         for i in range(len(self._list_model_3d)):
-            string += self.list_model_3d[i].gen_code(name_link + "_obj_" + str(i), port=port)
-            string += "object3d_" + name_link + "_list.push(object3d_" + name_link + "_obj_" + str(i) + ");\n"
+            string += self.list_model_3d[i].gen_code(
+                name_link + "_obj_" + str(i), port=port
+            )
+            string += (
+                "object3d_"
+                + name_link
+                + "_list.push(object3d_"
+                + name_link
+                + "_obj_"
+                + str(i)
+                + ");\n"
+            )
 
         string += "\n"
         string += "const " + name_link + " = {\n"

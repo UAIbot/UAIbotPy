@@ -1,8 +1,7 @@
-from utils import *
-
-
 def _add_col_object(self, sim):
-    if not Utils.get_uaibot_type(sim) == "uaibot.Simulation":
+    from uaibot.simulation import Simulation
+
+    if not isinstance(sim, Simulation):
         raise Exception("The parameter 'sim' should be a 'uaibot.Simulation' object.")
 
     for i in range(len(self.links)):

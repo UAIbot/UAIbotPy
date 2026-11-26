@@ -39,8 +39,13 @@ pybind11_add_module(uaibot_cpp_bind NO_EXTRAS
     dynamics_bindings.cpp auv_bindings.cpp uav_bindings.cpp
     manipulator_bindings.cpp robot_bindings.cpp
 )
-target_compile_features(uaibot_cpp_bind PRIVATE cxx_std_17)
-set_target_properties(uaibot_cpp_bind PROPERTIES CXX_EXTENSIONS OFF)
+# Bundled Eigen 3.3.7 relies on pre-C++20 comparison overload resolution.
+# cxx_std_17 would allow a compiler that defaults to C++20 or newer.
+set_target_properties(uaibot_cpp_bind PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+)
 target_include_directories(uaibot_cpp_bind PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(uaibot_cpp_bind PRIVATE Eigen3::Eigen pybind11::windows_extras)
 target_compile_definitions(uaibot_cpp_bind PRIVATE EIGEN_MPL2_ONLY)
@@ -76,7 +81,11 @@ set(UAIBOT_LEGACY_HEADERS_DIR "" CACHE PATH "Original dynamics header snapshot")
 if(UAIBOT_BUILD_DYNAMICS_TESTS AND UAIBOT_LEGACY_HEADERS_DIR)
     foreach(variant IN ITEMS current legacy)
         add_executable(dynamics_${variant}_trajectory tests/test_dynamics_legacy.cpp)
-        target_compile_features(dynamics_${variant}_trajectory PRIVATE cxx_std_17)
+        set_target_properties(dynamics_${variant}_trajectory PROPERTIES
+            CXX_STANDARD 17
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF
+        )
         target_link_libraries(dynamics_${variant}_trajectory PRIVATE Eigen3::Eigen)
     endforeach()
     target_include_directories(dynamics_current_trajectory PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")

@@ -1,11 +1,17 @@
-from utils import *
+from uaibot.utils import is_a_groupable_object, IS_GROUPABLE, inv_htm
 
 
 def _attach_object(self, obj):
     # Error handling
 
-    if not (Utils.get_uaibot_type(obj) in Utils.IS_GROUPABLE):
-        raise Exception("The parameter 'obj' must be one of the following types: " + str(Utils.IS_GROUPABLE) + ".")
+    if not (is_a_groupable_object(obj)):
+        raise Exception(
+            "The parameter 'obj' must be one of the following types: "
+            + str(IS_GROUPABLE)
+            + "."
+        )
+    if obj is self:
+        raise ValueError("A manipulator cannot be attached to itself.")
     # end error handling
 
-    self._attached_objects.append([obj, Utils.inv_htm(self.fkm()) @ obj.htm])
+    self._attached_objects.append([obj, inv_htm(self.fkm()) @ obj.htm])

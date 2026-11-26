@@ -1,17 +1,12 @@
-import os, sys
-
-currentdir = os.path.dirname(os.path.realpath(__file__))
-parentdir = os.path.dirname(currentdir)
-sys.path.append(parentdir)
-
+import os
 import numpy as np
-from utils import *
-from graphics.meshmaterial import *
-from simobjects.group import *
-from simobjects.frame import *
+from uaibot.utils import Utils
+from uaibot.graphics.model3d import Model3D
+from uaibot.simobjects.group import Group
+from uaibot.simobjects.frame import Frame
 
 from ._set_ani_frame import _set_ani_frame
-from ._add_ani_frame import _add_ani_frame
+from ._add_ani_frame import _add_ani_frame, _record_ani_frame
 
 
 
@@ -21,8 +16,6 @@ from ._jac_geo import _jac_geo
 from ._jac_jac_geo import _jac_jac_geo
 from ._jac_ana import _jac_ana
 
-from ._dyn_model import _dyn_model
-
 from ._vector_field_rn import _vector_field_rn
 from ._task_function import _task_function
 from ._vector_field_SE3 import _vector_field_SE3, _DELTA as _DELTA_SE3, _DS as _DS_SE3
@@ -30,7 +23,6 @@ from ._vector_field_SE3 import _vector_field_SE3, _DELTA as _DELTA_SE3, _DS as _
 
 from ._gen_code import _gen_code
 from ._update_col_object import _update_col_object
-from ._add_col_object import _add_col_object
 from ._attach_object import _attach_object
 from ._detach_object import _detach_object
 
@@ -51,532 +43,492 @@ from ._create_kinova_gen3 import _create_kinova_gen3
 from ._create_jaco import _create_jaco
 from ._create_ur_ur3e import _create_ur_ur3e
 
-from .links import *
+from .links import Link
+from ._manipulator_dynamics import _ManipulatorDynamics
+from ._dynamics import pose_array
 
 from ._constrained_control import _constrained_control
-from uaibot.simulation.simulation import *
-
-from ._dist_struct_robot_obj import *
-from ._dist_struct_robot_auto import *
+from ._dist_struct_robot_obj import DistStructRobotObj, DistStructLinkObj
+from ._dist_struct_robot_auto import DistStructRobotAuto, DistStructLinkLink
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from uaibot.robot import DistStructRobotObj
-    from uaibot.robot import DistStructRobotAuto
-    from uaibot.robot import Link
     from uaibot.simulation import Simulation
 
 from numpy.typing import ArrayLike, NDArray
 
-import os
 if os.environ['CPP_SO_FOUND']=="1":
-    import uaibot_cpp_bind as ub_cpp
-    from ._to_cpp import _to_cpp
+    from ._to_cpp import _set_joint_parameters, _to_cpp
 
-from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject, GroupableObject
+from uaibot.utils.types import HTMatrix, Matrix, Vector, MetricObject, GroupableObject, Groupable
 from typing import Optional, Tuple, List
 
+__all__ = ["Robot", "Manipulator"]
 
-class Robot:
+
+class Robot(Groupable):
+    """Common scene interface for manipulators and rigid-body robots.
+
+    Calling Robot(name, links, ...) is supported and creates a Manipulator.
     """
-  A class that contains a robot object in UAIBot.
 
-  Parameters
-  ----------
-
-  name : string
-      The robot name.
-      (default: 'genRobot').
-
-  htm_base_0 : 4x4 numpy matrix
-      The transformation between the robot's base and the first DH frame.
-      (default: 4x4 identity matrix).
-
-  htm_n_eef : 4x4 numpy matrix
-      The transformation between the last DH and the end-effector.
-      (default: 4x4 identity matrix).
-
-  list_object_3d_base : list of 'uaibot.Model3D' objects
-      The list of 3d models of the base of the robot.
-      If set to None, there is no base 3d object.
-      (default: None).
-
-  links : A list of 'uaibot.Link' objects
-      The list of link objects.
-
-  q0 : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
-      The robot initial configuration.
-      (default: zero vector).
-
-  eef_frame_visible : boolean
-      Set if the end-effector frame is visible.
-      (default: True).
-
-  joint_limit : n x 2 numpy array or None
-      A n x 2 numpy array containing the joint limits, either in rad or meters.
-      If set to 'None', use very large joint limits.
-      (default: None).
-  """
-
-    #######################################
-    # Attributes
-    #######################################
-
-    @property
-    def q(self) -> Vector:
-        """The current joint configuration."""
-        return np.matrix(self._q)
-
-    @property
-    def q0(self) -> Vector:
-        """The default joint configuration."""
-        return np.matrix(self._q0)
-
-    @property
-    def htm(self) -> HTMatrix:
-        """
-        The current base configuration in scenario coordinates.
-        A 4x4 homogeneous matrix written is scenario coordinates.
-        """
-        return np.matrix(self._htm)
-
-    @property
-    def htm_base_0(self) -> HTMatrix:
-        """
-        The constant homogeneous transformation between the HTM of the base and
-        the HTM of the first Denavit-Hartenberg frame.
-        """
-        return np.matrix(self._htm_base_0)
-
-    @property
-    def htm_n_eef(self) -> HTMatrix:
-        """
-        The constant homogeneous transformation between the HTM of the last
-        Denavit-Hartenberg frame and the end-effector
-        """
-        return np.matrix(self._htm_n_eef)
-
-    @property
-    def links(self) -> List["Link"]:
-        """Data structures containing the links of the robot."""
-        return self._links
-
-    @property
-    def attached_objects(self) -> List[GroupableObject]:
-        """Data structures containing the objects attached into the robot."""
-        return self._attached_objects
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(Manipulator if cls is Robot else cls)
 
     @property
     def name(self) -> str:
-        """Name of the object."""
         return self._name
 
     @property
-    def list_object_3d_base(self) -> List[Model3D]:
-        """The list of 3d objects that form the base."""
-        return self._list_object_3d_base
+    def htm(self) -> HTMatrix:
+        """Current robot base pose in world coordinates."""
+        return np.matrix(self._htm)
 
-    @property
-    def eef_frame_visible(self) -> bool:
-        """If the frame attached to the end effector is visible"""
-        return self._eef_frame_visible
-
-    @property
-    def joint_limit(self) -> np.matrix:
-        """A n x 2 numpy array containing the joint limits, either in rad or meters"""
-        return self._joint_limit
+    @htm.setter
+    def htm(self, value: HTMatrix) -> None:
+        self.set_state(htm=value)
 
     @property
     def cpp_robot(self):
-        """Used in the c++ interface"""
+        """The native model, or None for a Python-only manipulator."""
         return self._cpp_robot
-    
-    #######################################
-    # Constructor
-    #######################################
-
-    def __init__(self, name: str, links: List["Link"], list_base_3d_obj : Optional[HTMatrix] = None, 
-                 htm: HTMatrix =np.identity(4), htm_base_0: HTMatrix = np.identity(4),
-                 htm_n_eef: HTMatrix = np.identity(4), q0 : Optional[Vector] = None, 
-                 eef_frame_visible: bool =True, joint_limits: Optional[np.matrix] = None) -> "Robot":
-        # Error handling
-
-        if not (Utils.is_a_name(name)):
-            raise Exception(
-                "The parameter 'name' should be a string. Only characters 'a-z', 'A-Z', '0-9' and '_' are allowed. It should not begin with a number.")
-
-        if not Utils.is_a_matrix(htm, 4, 4):
-            raise Exception("The parameter 'htm' should be a 4x4 homogeneous transformation matrix.")
-
-        if not Utils.is_a_matrix(htm_base_0, 4, 4):
-            raise Exception("The parameter 'htm_base_0' should be a 4x4 homogeneous transformation matrix.")
-
-        if not Utils.is_a_matrix(htm_n_eef, 4, 4):
-            raise Exception("The parameter 'htm_n_eef' should be a 4x4 homogeneous transformation matrix.")
-
-        if not (str(type(links)) == "<class 'list'>"):
-            raise Exception("The parameter 'links' should be a list of 'uaibot.Link' objects.")
-        else:
-            for link in links:
-                if not Utils.get_uaibot_type(link) == "uaibot.Link":
-                    raise Exception("The parameter 'links' should be a list of 'uaibot.Link' objects.")
-
-        n = len(links)
-        
-        if name=="":
-            name="var_robot_id_"+str(id(self))
-            
-        if not (q0 is None):
-            self._q0 = np.matrix(q0).reshape((n,1))
-        else:
-            self._q0 = np.matrix(np.zeros((n,1)))
-
-        if not (str(type(list_base_3d_obj)) == "<class 'list'>" or (list_base_3d_obj is None)):
-            raise Exception("The parameter 'list_base_3d_obj' should be a list of 'uaibot.Model3D' objects.")
-        else:
-            for i in range(len(list_base_3d_obj)):
-                if not (Utils.get_uaibot_type(list_base_3d_obj[i]) == "uaibot.Model3D"):
-                    raise Exception(
-                        "The parameter 'list_base_3d_obj' should be a list of 'uaibot.Model3D' objects.")
-
-        if not Utils.is_a_vector(self._q0, n):
-            raise Exception("The parameter 'q0' should be a " + str(n) + " dimensional vector.")
-
-        if not str(type(eef_frame_visible)) == "<class 'bool'>":
-            raise Exception("The parameter 'eef_frame_visible' must be a boolean.")
-
-        if not joint_limits is None:
-            self._joint_limit = joint_limits
-        else:
-            self._joint_limit = np.block([-10 * np.ones((n, 1)) , 10 * np.ones((n, 1))])
-
-        if not Utils.is_a_matrix(self._joint_limit, n, 2):
-            raise Exception("The parameter 'joint_limits' should be a " + str(n) + " x 2 numpy array.")
-
-        for i in range(n):
-            if self._joint_limit[i, 0]>self._joint_limit[i, 0]:
-                raise Exception(
-                    "In the parameter 'joint_limits', the minimum value (first column) must be smaller or equal than the maximum value (second column)")
-
-        # end error handling
-
-        self._frames = []
-        self._list_object_3d_base = list_base_3d_obj
-        self._htm = np.matrix(htm)
-        self._name = name
-        self._attached_objects = []
-        self._links = links
-        self._htm_base_0 = htm_base_0
-        self._htm_n_eef = htm_n_eef
-        self._eef_frame_visible = eef_frame_visible
-
-        
-        if eef_frame_visible:
-            self._eef_frame = Frame(size=0.1)
-            
-        self._max_time = 0
-
-        #Create the cpp robot
-        if os.environ['CPP_SO_FOUND']=="1":
-            self._cpp_robot = _to_cpp(self)
-            
-        # Set initial total configuration
-        self.set_ani_frame(self._q0, self._htm)
-
-
 
     #######################################
-    # Std. Print
+    # Robot constructors
     #######################################
 
-    def __repr__(self):
-        n = len(self.links)
-
-        string = "Robot with name '" + self.name + "': \n\n"
-        string += " Number of joints: " + str(n) + "\n"
-        string += " Joint types: "
-
-        for i in range(n):
-            string += "R" if self._links[i].joint_type == 0 else "P"
-
-        string += "\n"
-        string += " Current configuration: " + str([round(num[0,0], 3) for num in self.q]) + "\n"
-        string += " Current base HTM: \n" + str(self.htm) + "\n"
-        string += " Current end-effector HTM: \n" + str(self.fkm())
-        return string
-
-    #######################################
-    # Methods for configuration changing
-    #######################################
-
-    def add_ani_frame(self, time: float, q: Optional[Vector]=None, htm: Optional[HTMatrix]=None, 
-                      enforce_joint_limits: bool = False) -> None:
+    @staticmethod
+    def create_kuka_kr5(htm: HTMatrix = np.identity(4), name: str ='', color: str ="#df6c25",
+                        opacity: float =1, eef_frame_visible: bool=True) -> "Manipulator":
         """
-    Add a single configuration to the object's animation queue.
+    Create a Kuka KR5 R850, a six-degree of freedom manipulator.
+    Thanks Sugi-Tjiu for the 3d model (see https://grabcad.com/library/kuka-kr-5-r850).
 
     Parameters
     ----------
-    time: positive float
-        The timestamp of the animation frame, in seconds.
-    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
-        The manipulator's joint configuration.
     htm : 4x4 numpy matrix
-        The robot base's configuration.
-        (default: the same as the current HTM).
-    enforce_joint_limits: boolean
-        If True and some q violates the joint limits (seen in the attribute 'joint_limit'), the
-        respective q is clamped. Note that it DOES NOT issue any warning for this. So, be aware.
-        (default: False).
+        The initial base configuration for the robot.
+        (default: np.identity(4))
+
+    name : string
+        The robot name.
+        (default: empty (automatic)).
+
+    htm : color
+        A HTML-compatible string representing the object color.
+        (default: '#df6c25')'.
+
+    opacity : positive float between 0 and 1
+        The opacity of the robot. 1 = fully opaque and 0 = transparent.
+        (default: 1)
 
     Returns
     -------
-    None
-    """
-        return _add_ani_frame(self, time, q, htm, enforce_joint_limits)
+    robot : Robot object
+        The robot.
 
-    def set_ani_frame(self, q: Optional[Vector]=None, htm: Optional[HTMatrix]=None, 
-                      enforce_joint_limits: bool = False) -> None:
+    """
+        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_kuka_kr5(htm, name, color, opacity)
+        return Manipulator(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
+
+    @staticmethod
+    def create_epson_t6(htm: HTMatrix = np.identity(4), name: str ='', color: str ="white",
+                        opacity: float =1, eef_frame_visible: bool = True)-> "Manipulator":
         """
-    Reset object's animation queue and add a single configuration to the 
-    object's animation queue.
+    Create an Epson T6, a SCARA manipulator.
+    Thanks KUA for the 3d model (see https://grabcad.com/library/epson-t6-scara-robot-1).
 
     Parameters
     ----------
-    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
-        The manipulator's joint configuration.
-        (default: the current joint configuration (robot.q) for the manipulator, q0).
     htm : 4x4 numpy matrix
-        The robot base's configuration.
-        (default: the same as the current HTM).
-    enforce_joint_limits: boolean
-        If True and some q violates the joint limits (seen in the attribute 'joint_limit'), the
-        respective q is clamped. Note that it DOES NOT issue any warning for this. So, be aware.
-        (default: False).
+        The initial base configuration for the robot.
+        (default: np.identity(4))
+
+    name : string
+        The robot name.
+        (default: empty (automatic)).
+
+    htm : color
+        A HTML-compatible string representing the object color.
+        (default: 'white')'.
+
+    opacity : positive float between 0 and 1
+        The opacity of the robot. 1 = fully opaque and 0 = transparent.
+        (default: 1)
+
     Returns
     -------
-    None
+    robot : Robot object
+        The robot.
+
     """
-        return _set_ani_frame(self, q, htm, enforce_joint_limits)
+        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_epson_t6(htm, name, color, opacity)
+        return Manipulator(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
+
+    @staticmethod
+    def create_staubli_tx60(htm: HTMatrix = np.identity(4), name: str = '', color: str ="#ff9b00",
+                            opacity: float =1, eef_frame_visible: bool = True) -> "Manipulator":
+        """
+    Create a Staubli TX60, a six degree of freedom manipulator.
+    Model taken from the ROS github repository (https://github.com/ros-industrial/staubli).
+
+    Parameters
+    ----------
+    htm : 4x4 numpy matrix
+        The initial base configuration for the robot.
+        (default: np.identity(4))
+
+    name : string
+        The robot name.
+        (default: empty (automatic)).
+
+    htm : color
+        A HTML-compatible string representing the object color.
+        (default: '#ff9b00')'.
+
+    opacity : positive float between 0 and 1
+        The opacity of the robot. 1 = fully opaque and 0 = transparent.
+        (default: 1)
+
+    Returns
+    -------
+    robot : Robot object
+        The robot.
+
+    """
+        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_staubli_tx60(htm, name, color, opacity)
+        return Manipulator(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
+
+    @staticmethod
+    def create_kuka_lbr_iiwa(htm: HTMatrix = np.identity(4), name: str = '', color: str = "",
+                             opacity: float =1, eef_frame_visible: bool = True) -> "Manipulator":
+        """
+    Create a Kuka LBR IIWA 14 R820, a seven degree of freedom manipulator.
+    Model taken from the ROS github repository (https://github.com/ros-industrial/kuka_experimental).
+
+    Parameters
+    ----------
+    htm : 4x4 numpy matrix
+        The initial base configuration for the robot.
+        (default: np.identity(4))
+
+    name : string
+        The robot name.
+        (default: empty (automatic)).
+
+    htm : color
+        A HTML-compatible string representing the object color.
+        If set to '' (empty string), set colors from textures.
+        (default: '')'.
+
+    opacity : positive float between 0 and 1
+        The opacity of the robot. 1 = fully opaque and 0 = transparent.
+        (default: 1)
+
+    Returns
+    -------
+    robot : Robot object
+        The robot.
+
+    """
+        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_kuka_lbr_iiwa(htm, name, color, opacity)
+        return Manipulator(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
+
+    @staticmethod
+    def create_franka_emika_3(htm: HTMatrix = np.identity(4), name: str = '', color : str = "",
+                              opacity: float = 1, eef_frame_visible: bool = True) -> "Manipulator":
+        """
+    Create a Franka Emika 3, a seven degree of freedom manipulator.
+    Model taken from the ROS github repository (https://github.com/BolunDai0216/FR3Env/tree/d5218531471cadafd395428f8c2033f6feeb3555/FR3Env/robots/meshes/visual).
+
+    Parameters
+    ----------
+    htm : 4x4 numpy matrix
+        The initial base configuration for the robot.
+        (default: np.identity(4))
+
+    name : string
+        The robot name.
+        (default: empty (automatic)).
+
+    htm : color
+        A HTML-compatible string representing the object color.
+        If set to '' (empty string), set colors from textures.
+        (default: '')'.
+
+    opacity : positive float between 0 and 1
+        The opacity of the robot. 1 = fully opaque and 0 = transparent.
+        (default: 1)
+
+    Returns
+    -------
+    robot : Robot object
+        The robot.
+
+    """
+        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_franka_emika_3(htm, name, color, opacity)
+        return Manipulator(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
+
+    @staticmethod
+    def create_abb_crb(htm : HTMatrix = np.identity(4), name: str = '', color: str = "white",
+                       opacity: float = 1, eef_frame_visible: bool = True) -> "Manipulator":
+        """
+    Create a ABB CRB 15000, a six degree of freedom manipulator.
+    Model taken from the ROS github repository (https://github.com/ros-industrial/abb_experimental).
+
+    Parameters
+    ----------
+    htm : 4x4 numpy matrix
+        The initial base configuration for the robot.
+        (default: np.identity(4))
+
+    name : string
+        The robot name.
+        (default: empty (automatic)).
+
+    htm : color
+        A HTML-compatible string representing the object color.
+        (default: 'white')'.
+
+    opacity : positive float between 0 and 1
+        The opacity of the robot. 1 = fully opaque and 0 = transparent.
+        (default: 1)
+
+    Returns
+    -------
+    robot : Robot object
+        The robot.
+
+    """
+        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_abb_crb(htm, name, color, opacity)
+        return Manipulator(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
+
+    @staticmethod
+    def create_magician_e6(htm: HTMatrix = np.identity(4), name: str = "", color: str = "",
+                           opacity: float = 1, eef_frame_visible: bool = True) -> "Manipulator":
+        """
+    Create a DOBOT Magician E6, a six degree of freedom manipulator.
+    Model taken from the ROS github repository (https://github.com/Dobot-Arm/TCP-IP-ROS-6AXis).
+
+    Parameters
+    ----------
+    htm : 4x4 numpy matrix
+        The initial base configuration for the robot.
+        (default: np.identity(4))
+
+    name : string
+        The robot name.
+        (default: empty (automatic)).
+
+    htm : color
+        A HTML-compatible string representing the object color.
+        (default: '')'.
+
+    opacity : positive float between 0 and 1
+        The opacity of the robot. 1 = fully opaque and 0 = transparent.
+        (default: 1)
+
+    Returns
+    -------
+    robot : Robot object
+        The robot.
+
+    """
+        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_magician_e6(htm, name, color, opacity)
+        return Manipulator(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
+
+    @staticmethod
+    def create_darwin_mini(htm: HTMatrix = np.identity(4), name: str = "", color: str = "#3e3f42",
+                           opacity: float = 1, eef_frame_visible: bool = True) -> GroupableObject:
+        """
+    Create an (oversized) Darwin Mini, a humanoid robot.
+    Thanks to Alexandre Le Falher for the 3D model (https://grabcad.com/library/darwin-mini-1).
+
+    Parameters
+    ----------
+    htm : 4x4 numpy matrix
+        The initial base configuration for the robot.
+        (default: np.identity(4))
+
+    name : string
+        The robot name.
+        (default: empty (automatic)).
+
+    htm : color
+        A HTML-compatible string representing the object color.
+        (default: '#3e3f42').
+
+    opacity : positive float between 0 and 1
+        The opacity of the robot. 1 = fully opaque and 0 = transparent.
+        (default: 1)
+
+    Returns
+    -------
+    robot : Group object
+        The robot. It is composed of a group of six objects: the two arms and legs (members of 'Robot' class)
+        and the chest and head (both 'RigidObject' class)
+
+
+    """
+
+        param_arm_left, param_arm_right, param_leg_left, param_leg_right, head, chest = _create_darwin_mini(htm, name,
+                                                                                                            color,
+                                                                                                            opacity)
+        desl_z = htm * Utils.trn([0, 0, -0.18])
+        robot_arm_left = Manipulator(name + "__arm_left", param_arm_left[1], param_arm_left[0],
+                               desl_z * Utils.trn([0, 0.14, 1]) * Utils.rotx(-3.14 / 2), param_arm_left[2],
+                               param_arm_left[3], [np.pi/2,0.3,0], eef_frame_visible,
+                               param_arm_left[5])
+
+        robot_arm_right = Manipulator(name + "__arm_right", param_arm_right[1], param_arm_right[0],
+                                desl_z * Utils.rotz(3.14) * Utils.trn([0, 0.14, 1]) * Utils.rotx(-3.14 / 2),
+                                param_arm_right[2],
+                                param_arm_right[3], [np.pi/2,0.3,0], eef_frame_visible, param_arm_right[5])
+
+        robot_leg_left = Manipulator(name + "__leg_left", param_leg_left[1], param_leg_left[0],
+                               desl_z * Utils.trn([0, -0.1, 0.7]) * Utils.roty(np.pi / 2) * Utils.rotz(-np.pi / 2),
+                               param_leg_left[2], param_leg_left[3], [np.pi/2, 0, 0, np.pi/2], eef_frame_visible, param_leg_left[5])
+
+        robot_leg_right = Manipulator(name + "__leg_right", param_leg_right[1], param_leg_right[0],
+                                desl_z * Utils.trn([0, 0.1, 0.7]) * Utils.roty(np.pi / 2) * Utils.rotz(-np.pi / 2),
+                                param_leg_right[2], param_leg_right[3], [np.pi/2, 0, 0, np.pi/2], eef_frame_visible, param_leg_right[5])
+
+        return Group([robot_arm_left, robot_arm_right, robot_leg_left, robot_leg_right, head, chest])
+
+    @staticmethod
+    def create_davinci(htm: HTMatrix = np.identity(4), name: str = "", color: str = "#3e3f42",
+                       opacity: float = 1, eef_frame_visible: bool = True) -> GroupableObject:
+        """
+        Create a da Vinci Si, a surgical robot.
+        Thanks to Koray Okan for the 3D model (https://grabcad.com/library/da-vinci-surgical-robot-1/details).
+        Created by Felipe Bartelt.
+        Parameters
+        ----------
+        htm : 4x4 numpy matrix
+            The initial base configuration for the robot.
+            (default: np.identity(4))
+        name : string
+            The robot name.
+            (default: empty (automatic)).
+        htm : color
+            A HTML-compatible string representing the object color.
+            (default: '#3e3f42').
+        opacity : positive float between 0 and 1
+            The opacity of the robot. 1 = fully opaque and 0 = transparent.
+            (default: 1)
+        Returns
+        -------
+        robot : Group object
+            The robot. It is composed of a group of six objects: the two arms and legs (members of 'Robot' class)
+            and the chest and head (both 'RigidObject' class)
+        """
+
+        return _create_davinci(htm, name, color, opacity, eef_frame_visible)
+
+    @staticmethod
+    def create_kinova_gen3(
+        htm: HTMatrix = np.eye(4),
+        name: str = "",
+        color: str = "#e6e1e1",
+        opacity: float = 1.0,
+        eef_frame_visible: bool = True
+        ) -> "Manipulator":
+        """Create a Kinova Gen3-7DoF, a seven degree of freedom
+        manipulator.
+
+        Model from Kinova Resources (https://www.kinovarobotics.com/resources
+        Gen3 CAD model (7DoF)). Manipulator parameters taken from the official
+        Kinova Gen3 documentation (GEN3 User Guide), available at
+        https://www.kinovarobotics.com/resources.
+        There is no gripper in this model, because it is not available.
+
+        Parameters
+        ----------
+        htm : 4x4 numpy array or 4x4 nested list
+            The initial base configuration for the robot.
+            (default: np.identity(4))
+        name : string
+            The robot name.
+            (default: empty (automatic)).
+        color: string
+            A HTML-compatible string representing the object color.
+            (default: '#e6e1e1').
+        opacity : positive float between 0 and 1
+            The opacity of the robot. 1 = fully opaque and 0 = transparent.
+            (default: 1)
+
+        Returns
+        -------
+        robot : Robot object
+            The robot.
+        """
+
+        return _create_kinova_gen3(htm, name, color, opacity, eef_frame_visible)
+
+    @staticmethod
+    def create_jaco(
+        htm: HTMatrix = np.eye(4),
+        name: str = "",
+        color: str | list | None = None,
+        opacity: float = 1.0,
+        eef_frame_visible: bool = True
+        ) -> "Manipulator":
+        """Create a Kinova Jaco 2, a six degree of freedom manipulator.
+        Model taken from Kinova resources
+        (https://www.kinovarobotics.com/resources?r=79302&s).
+        Robot documentation available at
+        https://www.kinovarobotics.com/resources?r=339.
+        The gripper is not yet controllable.
+
+        Parameters
+        ----------
+        htm : 4x4 numpy array or 4x4 nested list
+            The initial base configuration for the robot.
+            (default: np.identity(4))
+        name : string
+            The robot name.
+            (default: empty (automatic)).
+        color : string or list or None
+            A HTML-compatible string representing the object color or a list of
+            HTML-compatible strings representing the object color. The list
+            should have three elements, representing the color of the links,
+            plastic rings, and the nails, respectively. If less than three
+            elements are provided, the remaining elements will be set to the
+            last element of the list. If a single string is provided, it will
+            be used for all three elements.
+            If set to None, the default color scheme is used, which is a list
+            of three strings: ["#3e3f42", "#919090", "#1d1d1f"].
+        opacity : positive float between 0 and 1
+            The opacity of the robot. 1 = fully opaque and 0 = transparent.
+            (default: 1)
+
+        Returns
+        -------
+        robot : Robot object
+            The robot.
+        """
+
+        return _create_jaco(htm, name, color, opacity, eef_frame_visible)
+
+    @staticmethod
+    def create_ur_ur3e(
+        htm: HTMatrix = np.eye(4),
+        name: str = "",
+        color: str | list | None = 'white',
+        opacity: float = 1.0,
+        eef_frame_visible: bool = True
+        ) -> "Manipulator":
+
+        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_ur_ur3e(htm, name, color, opacity)
+        return Manipulator(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
+
+
+
 
     #######################################
-    # Methods for kinematics model
+    # Distance computation and collision
     #######################################
 
-    def fkm(self, q: Optional[Vector] = None, axis: str ='eef', htm: Optional[HTMatrix]=None, 
-            mode: str ='auto') -> List[HTMatrix]:
-        """
-    Compute the forward kinematics for an axis at a given joint and base
-    configuration. Everything is written in the scenario coordinates.
-
-    Parameters
-    ----------
-    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
-        The manipulator's joint configuration.
-        (default: the current  joint configuration (robot.q) for the manipulator).
-    axis : string
-        For which axis you want to compute the FK:
-        'eef': for the end-effector;
-        'dh': for all Denavit-Hartenberg axis;
-        'com': for all center-of-mass axis.
-        (default: 'eef').    
-    htm : 4x4 numpy matrix
-        The robot base's configuration.
-        (default: the same as the current HTM).
-    mode : string
-        'c++' for the c++ implementation, 'python' for the python implementation
-        and 'auto' for automatic ('c++' is available, else 'python')
-        (default: 'auto').
-
-    Returns
-    -------
-    htm_fk : list of 4x4 numpy matrices
-        For axis='eef', returns a single htm. For the other cases, return
-        n htms as a list of 4x4 numpy matrices.
-    """
-        return _fkm(self, q, axis, htm, mode)
-
-    def ikm(self, htm_tg: HTMatrix, htm: Optional[HTMatrix]=None, q0: Optional[Vector]=None, p_tol: float=0.001, 
-            a_tol: float =5, no_iter_max: int =200, ignore_orientation: bool = False, 
-            no_tries = 40, check_joint: bool = True, check_auto: bool = True, 
-            obstacles: List[MetricObject]=[], mode: str ='auto') -> Vector:
-        """
-    Try to solve the inverse kinematic problem for the end-effector, given a
-    desired homogeneous transformation matrix. It returns the manipulator
-    configuration.
-
-    Uses an iterative algorithm.
-
-    The algorithm can fail, throwing an Exception when it happens.
-
-    Parameters
-    ----------
-    htm_tg : 4x4 numpy matrix
-        The target end-effector HTM, written in scenario coordinates.       
-    htm : 4x4 numpy matrix
-        The pose of the basis of the manipulator.
-        (default: 'None' (the current base htm))
-    q0 : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
-        Initial guess for the algorithm for the joint configuration.
-        (default: a random joint configuration).
-    p_tol : positive float
-        The accepted error for the end-effector position, in meters.
-        (default: 0.001 m).    
-    a_tol : positive float
-        The accepted error for the end-effector orientation, in degrees.
-        (default: 5 degrees). 
-    no_iter_max : positive int
-        The maximum number of iterations for the algorithm.
-        (default: 200 iterations).
-    ignore_orientation: boolean
-        If True, the orientation part of the HTM is ignored. Task is position-only.
-        (default: False)
-    no_tries: positive int.
-        How many times the algorithm tries to find a solution.
-        (default: 40)
-    check_joint: boolen
-        If True, consider the joint limits as well.
-        (default: True)
-    check_auto: boolen
-        If True, consider the auto collision of the robot.
-        (default: True)
-    obstacles: list of 'MetricObject' objects
-        List of objects as obstacles to consider.
-        (default: Empty list)
-    mode : string
-        'c++' for the c++ implementation, 'python' for the python implementation
-        and 'auto' for automatic ('c++' is available, else 'python')
-        (default: 'auto').
-
-    Returns
-    -------
-    q : n x 1 numpy matrix
-        The configuration that solves the IK problem.
-    """
-    
-        return _ikm(self, htm_tg, htm, q0, p_tol, a_tol, no_iter_max, ignore_orientation, 
-                    no_tries, check_joint, check_auto, obstacles, mode)
-
-    def jac_geo(self, q: Optional[Vector] = None, axis: str ='eef', htm : Optional[HTMatrix]=None, 
-                mode: str ='auto') -> Tuple[np.matrix,HTMatrix]:
-        """
-    Compute the geometric Jacobian for an axis at a given joint and base
-    configuration. Also returns the forward kinematics as a by-product.
-    Everything is written in the scenario coordinates.
-
-    Parameters
-    ----------
-    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
-        The manipulator's joint configuration 
-        (default: the current  joint configuration (robot.q) for the manipulator).
-    axis : string
-        For which axis you want to compute the FK:
-        'eef': for the end-effector;
-        'dh': for all Denavit-Hartenberg axis;
-        'com': for all center-of-mass axis.
-        (default: 'eef').    
-    htm : 4x4 numpy matrix
-        The robot base's configuration.
-        (default: the same as the current htm).
-    mode : string
-        'c++' for the c++ implementation, 'python' for the python implementation
-        and 'auto' for automatic ('c++' is available, else 'python')
-        (default: 'auto').
-
-    Returns
-    -------
-    jac_geo : 6 x n or list of 6 x n numpy matrices
-        For axis='eef', returns a single 6xn Jacobian. For the other cases, 
-        return n Jacobians as a list of n 6xn numpy matrices.
-
-    htm_out : 4 x 4 or list of 4 x 4 numpy matrices
-        For axis='eef', returns a single htm as a 4x4 matrix. For the other cases, return
-        n htms as  a list of n 4x4 numpy matrices.
-    """
-        return _jac_geo(self, q, axis, htm, mode)
-
-    def jac_ana(self, q: Optional[Vector]=None, htm: Optional[HTMatrix]=None) -> Tuple[Matrix,HTMatrix,Vector]:
-        """
-    Compute the analytic Jacobian for the end-effector. The Euler angle
-    convention is zyx. Also returns the end-effector htm and Euler angles
-    as a by-product.
-
-    Parameters
-    ----------
-    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
-        The manipulator's joint configuration
-        (default: the current  joint configuration (robot.q) for the manipulator).
-    htm : 4x4 numpy matrix
-        The robot base's configuration.
-        (default: the same as the current htm).
-
-    Returns
-    -------
-    jac_ana : 6 x n numpy matrix
-        The analytic Jacobian.
-
-    htm_eef : 4 x 4 numpy matrix
-        The end-effector htm.
-
-    phi : 3x1 numpy matrix
-        The euler angles in the z (alpha), y (beta) and x (gamma) convention,
-        as a column vector.
-    """
-        return _jac_ana(self, q, htm)
-
-    def jac_jac_geo(self, q: Optional[Vector] =None, axis: str ='eef', 
-                    htm: Optional[HTMatrix] = None)-> List[np.matrix]:
-        """
-    Compute the Jacobians of the columns of the geometric Jacobian in the joint variable 'q'.
-    This can be either to the end-effector frames (axis='eef'), to the Denavit-Hartenberg (DH) frames
-    (axis='dh') or to the center-of-mass (COM) frames (axis='com').
-
-    If axis ='dh' or 'com':
-
-    If the robot has n links, jj_geo = robot.jac_jac_geo(q, htm) is a list of lists, in which
-    jj_geo[i][j] is a 6 x n matrix that represents the Jacobian of the j-th column of the geometric
-    Jacobian matrix of the i-th DH or COM frame.
-
-    jj_geo[i][j] for j>i is not computed, because the j-th column of the geometric Jacobian matrix of the
-    i-th DH or COM frame is always the 6 x n zero matrix, regardless of the 'q' and 'htm' chosen.
-
-    jj_geo[i][j] could be alternatively computed numerically. For example, for axis='dh', by defining the function of q
-    f = lambda q_var: np.matrix(robot.jac_geo(q = q_var, htm = htm, axis = 'dh')[0][i][j])
-    and then computing the numerical Jacobian as Utils.jac(f,q).
-    However, this function  is faster and has greater numerical accuracy, since it is computed analytically
-    instead of numerically.
-
-    If axis='eef', this is the same as computing axis='dh' but throwing away all but the last list away.
-
-
-    Parameters
-    ----------
-    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
-        The manipulator's joint configuration
-        (default: the current  joint configuration (robot.q) for the manipulator).
-
-    axis : string
-        For which axis you want to compute the FK:
-        'eef': for the end-effector;
-        'dh': for all Denavit-Hartenberg axis;
-        'com': for all center-of-mass axis.
-        (default: 'eef').
-
-    htm : 4x4 numpy matrix
-        The robot base's configuration.
-        (default: the same as the current htm).
-
-    Returns
-    -------
-    jj_geo : list of lists of 6 x n numpy arrays (if axis='dh' or 'com') or a list of 6 x n numpy arrays (if axis=='eef')
-        The Jacobian of the j-th column of the geometric Jacobian matrix of the i-th Denavit-Hartenberg frame.
-
-    """
-        return _jac_jac_geo(self, q, axis, htm)
-
-    #######################################
-    # Methods for control
-    #######################################
-    
     @staticmethod
     def vector_field(q, curve: List[Vector], alpha: float =1, 
                      const_vel: float =1, is_closed: bool = True, gamma: float=10, mode: str ='auto') -> Tuple[np.matrix,float,int]:
@@ -648,60 +600,6 @@ class Robot:
 
         return _vector_field_rn(q, curve, alpha, const_vel, is_closed, gamma, mode)
  
-    def task_function(self, htm_tg: HTMatrix, q: Optional[None]=None, 
-                      htm: Optional[Vector] = None, mode: str = 'auto') -> Tuple[np.matrix,np.matrix]:
-        """
-    Computes the 6-dimensional task function for end-effector pose control,  
-    given a joint configuration, a base configuration and the desired pose 
-    'htm_tg'.
-
-    The first three entries are position error, and the three last entries are
-    orientation error.
-
-    Everything is written in scenario coordinates. 
-
-    Also returns the Jacobian of this function.
-
-    Parameters
-    ----------
-    htm_tg : 4x4 numpy array 
-        The target end-effector pose. 
-     
-    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
-        The manipulator's joint configuration.
-        (default: the current  joint configuration (robot.q) for the manipulator).
-
-    htm : 4x4 numpy array 
-        The robot base's configuration.
-        (default: the same as the current htm).
-
-    mode : string
-        'c++' for the c++ implementation, 'python' for the python implementation
-        and 'auto' for automatic ('c++' is available, else 'python')
-        (default: 'auto').
-
-    Returns
-    -------
-    r : 6 x 1 numpy matrix
-        The task function.
-
-    jac_r : 6 x n numpy matrix
-        The respective task Jacobian.
-    """
-    
-        return _task_function(self, htm_tg, q, htm, mode)
-
-    def constrained_control(self, htm_tg: HTMatrix, q: Optional[Vector] = None, obstacles: List[MetricObject]=[], 
-                            htm: Optional[HTMatrix] = None, Kp: float =  2.0, eta_obs: float = 0.3, eta_auto: float = 0.3, eta_joint: float = 0.3, 
-                              eps_to_obs: float = 0.003, h_to_obs: float = 0.003, eps_auto: float = 0.02,  h_auto: float = 0.05, 
-                              d_safe_obs: float = 0.02, d_safe_auto: float = 0.002, d_safe_jl: float = (np.pi/180)*5,
-                              eps_reg: float = 0.01) -> Tuple[np.matrix, float, float, float, float]:
-        
-
-        
-        return _constrained_control(self, htm_tg, q, obstacles, htm, Kp, eta_obs, eta_auto, eta_joint, 
-                              eps_to_obs, h_to_obs, eps_auto,  h_auto, d_safe_obs, d_safe_auto, d_safe_jl,eps_reg)
-    
     @staticmethod
     def vector_field_SE3(
         state: HTMatrix,
@@ -808,6 +706,569 @@ class Robot:
         return _vector_field_SE3(state, curve, kt1, kt2, kt3, kn1, kn2, curve_derivative, delta, ds, mode)
         
         
+
+class Manipulator(_ManipulatorDynamics, Robot):
+    """
+  A class that contains a robot object in UAIBot.
+
+  Parameters
+  ----------
+
+  name : string
+      The robot name.
+      (default: 'genRobot').
+
+  htm_base_0 : 4x4 numpy matrix
+      The transformation between the robot's base and the first DH frame.
+      (default: 4x4 identity matrix).
+
+  htm_n_eef : 4x4 numpy matrix
+      The transformation between the last DH and the end-effector.
+      (default: 4x4 identity matrix).
+
+  list_object_3d_base : list of 'uaibot.Model3D' objects
+      The list of 3d models of the base of the robot.
+      If set to None, there is no base 3d object.
+      (default: None).
+
+  links : A list of 'uaibot.Link' objects
+      The list of link objects.
+
+  q0 : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+      The robot initial configuration.
+      (default: zero vector).
+
+  eef_frame_visible : boolean
+      Set if the end-effector frame is visible.
+      (default: True).
+
+  joint_limit : n x 2 numpy array or None
+      A n x 2 numpy array containing the joint limits, either in rad or meters.
+      If set to 'None', use very large joint limits.
+      (default: None).
+  """
+
+    #######################################
+    # Attributes
+    #######################################
+
+    @property
+    def q(self) -> Vector:
+        """The current joint configuration."""
+        if self.has_dynamics:
+            return np.matrix(self.cpp_robot.state.q).T
+        return np.matrix(self._q)
+
+    @q.setter
+    def q(self, value: Vector) -> None:
+        self.set_state(q=value)
+
+    @property
+    def q0(self) -> Vector:
+        """The default joint configuration."""
+        return np.matrix(self._q0)
+
+    @property
+    def htm_base_0(self) -> HTMatrix:
+        """
+        The constant homogeneous transformation between the HTM of the base and
+        the HTM of the first Denavit-Hartenberg frame.
+        """
+        return np.matrix(self._htm_base_0)
+
+    @htm_base_0.setter
+    def htm_base_0(self, htm: HTMatrix) -> None:
+        """Set the fixed mounting transform from DH0 to the robot base."""
+        pose = pose_array(htm)
+        if self.cpp_robot is not None:
+            self.cpp_robot.set_htm_extra(pose, self._htm_n_eef)
+            if self.has_dynamics:
+                links = self.dynamics_parameters.links
+                links[0].parent_to_joint = pose
+                self.dynamics_parameters.links = links
+        self._htm_base_0 = np.matrix(pose)
+
+    @property
+    def htm_n_eef(self) -> HTMatrix:
+        """
+        The constant homogeneous transformation between the HTM of the last
+        Denavit-Hartenberg frame and the end-effector
+        """
+        return np.matrix(self._htm_n_eef)
+
+    @htm_n_eef.setter
+    def htm_n_eef(self, htm: HTMatrix) -> None:
+        self.set_htm_to_eef(htm)
+
+    @property
+    def links(self) -> List["Link"]:
+        """Data structures containing the links of the robot."""
+        return self._links.copy()
+
+    @property
+    def attached_objects(self) -> List[GroupableObject]:
+        """Data structures containing the objects attached into the robot."""
+        return self._attached_objects
+
+    @property
+    def list_object_3d_base(self) -> List[Model3D]:
+        """The list of 3d objects that form the base."""
+        return self._list_object_3d_base
+
+    @property
+    def eef_frame_visible(self) -> bool:
+        """If the frame attached to the end effector is visible"""
+        return self._eef_frame_visible
+
+    @property
+    def joint_limit(self) -> np.matrix:
+        """Read-only joint limits in rad or m. Assign a new matrix to edit."""
+        limits = self._joint_limit.copy()
+        limits.setflags(write=False)
+        return limits
+
+    @joint_limit.setter
+    def joint_limit(self, limits):
+        self._set_joint_limits(limits)
+
+    #######################################
+    # Constructor
+    #######################################
+
+    def __init__(self, name: str, links: List["Link"], list_base_3d_obj : Optional[HTMatrix] = None,
+                 htm: HTMatrix =np.identity(4), htm_base_0: HTMatrix = np.identity(4),
+                 htm_n_eef: HTMatrix = np.identity(4), q0 : Optional[Vector] = None,
+                 eef_frame_visible: bool =True, joint_limits: Optional[np.matrix] = None) -> None:
+        # Error handling
+
+        if not (Utils.is_a_name(name)):
+            raise Exception(
+                "The parameter 'name' should be a string. Only characters 'a-z', 'A-Z', '0-9' and '_' are allowed. It should not begin with a number.")
+
+        if not Utils.is_a_matrix(htm, 4, 4):
+            raise Exception("The parameter 'htm' should be a 4x4 homogeneous transformation matrix.")
+
+        if not Utils.is_a_matrix(htm_base_0, 4, 4):
+            raise Exception("The parameter 'htm_base_0' should be a 4x4 homogeneous transformation matrix.")
+
+        if not Utils.is_a_matrix(htm_n_eef, 4, 4):
+            raise Exception("The parameter 'htm_n_eef' should be a 4x4 homogeneous transformation matrix.")
+
+        if not isinstance(links, list):
+            raise Exception("The parameter 'links' should be a list of 'uaibot.Link' objects.")
+        else:
+            for link in links:
+                if not isinstance(link, Link):
+                    raise Exception("The parameter 'links' should be a list of 'uaibot.Link' objects.")
+
+        n = len(links)
+
+        if name=="":
+            name="var_robot_id_"+str(id(self))
+
+        if not (q0 is None):
+            self._q0 = Utils.cvt(q0)
+        else:
+            self._q0 = np.matrix(np.zeros((n,1)))
+
+        if list_base_3d_obj is None:
+            list_base_3d_obj = []
+        if not isinstance(list_base_3d_obj, list):
+            raise Exception("The parameter 'list_base_3d_obj' should be a list of 'uaibot.Model3D' objects.")
+        else:
+            for i in range(len(list_base_3d_obj)):
+                if not isinstance(list_base_3d_obj[i], Model3D):
+                    raise Exception(
+                        "The parameter 'list_base_3d_obj' should be a list of 'uaibot.Model3D' objects.")
+
+        if not Utils.is_a_vector(self._q0, n):
+            raise Exception("The parameter 'q0' should be a " + str(n) + " dimensional vector.")
+
+        if not isinstance(eef_frame_visible, bool):
+            raise Exception("The parameter 'eef_frame_visible' must be a boolean.")
+
+        if joint_limits is None:
+            joint_limits = np.tile([-10., 10.], (n, 1))
+        self._joint_limit = self._validated_joint_limits(joint_limits, n)
+
+        # end error handling
+
+        self._frames = []
+        self._list_object_3d_base = list_base_3d_obj
+        self._htm = np.matrix(htm)
+        self._name = name
+        self._attached_objects = []
+        self._links = links.copy()
+        self._htm_base_0 = np.matrix(htm_base_0)
+        self._htm_n_eef = np.matrix(htm_n_eef)
+        self._eef_frame_visible = eef_frame_visible
+
+
+        if eef_frame_visible:
+            self._eef_frame = Frame(size=0.1)
+
+        self._max_time = 0
+
+        self._cpp_robot = _to_cpp(self) if os.environ['CPP_SO_FOUND'] == '1' else None
+        self._com_dh = None
+        self._state_time = 0.0
+        for link in self._links:
+            link._collision_owners.add(self)
+
+        # Set initial total configuration
+        self.set_ani_frame(self._q0, self._htm)
+
+
+
+    #######################################
+    # Std. Print
+    #######################################
+
+    def __repr__(self):
+        n = len(self.links)
+
+        string = "Manipulator with name '" + self.name + "': \n\n"
+        string += " Number of joints: " + str(n) + "\n"
+        string += " Joint types: "
+
+        for i in range(n):
+            string += "R" if self._links[i].joint_type == 0 else "P"
+
+        string += "\n"
+        string += " Current configuration: " + str([round(num[0,0], 3) for num in self.q]) + "\n"
+        string += " Current base HTM: \n" + str(self.htm) + "\n"
+        string += " Current end-effector HTM: \n" + str(self.fkm())
+        return string
+
+    #######################################
+    # Methods for configuration changing
+    #######################################
+
+    def _record_ani_frame(self, time):
+        _record_ani_frame(self, time)
+
+    def add_ani_frame(self, time: float, q: Optional[Vector]=None, htm: Optional[HTMatrix]=None,
+                      enforce_joint_limits: bool = False) -> None:
+        """
+    Add a single configuration to the object's animation queue.
+
+    Parameters
+    ----------
+    time: positive float
+        The timestamp of the animation frame, in seconds.
+    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+        The manipulator's joint configuration.
+    htm : 4x4 numpy matrix
+        The robot base's configuration.
+        (default: the same as the current HTM).
+    enforce_joint_limits: boolean
+        If True and some q violates the joint limits (seen in the attribute 'joint_limit'), the
+        respective q is clamped. Note that it DOES NOT issue any warning for this. So, be aware.
+        (default: False).
+
+    Returns
+    -------
+    None
+    """
+        return _add_ani_frame(self, time, q, htm, enforce_joint_limits)
+
+    def set_ani_frame(self, q: Optional[Vector]=None, htm: Optional[HTMatrix]=None,
+                      enforce_joint_limits: bool = False) -> None:
+        """
+    Reset object's animation queue and add a single configuration to the
+    object's animation queue.
+
+    Parameters
+    ----------
+    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+        The manipulator's joint configuration.
+        (default: the current joint configuration (robot.q) for the manipulator, q0).
+    htm : 4x4 numpy matrix
+        The robot base's configuration.
+        (default: the same as the current HTM).
+    enforce_joint_limits: boolean
+        If True and some q violates the joint limits (seen in the attribute 'joint_limit'), the
+        respective q is clamped. Note that it DOES NOT issue any warning for this. So, be aware.
+        (default: False).
+    Returns
+    -------
+    None
+    """
+        return _set_ani_frame(self, q, htm, enforce_joint_limits)
+
+    #######################################
+    # Methods for kinematics model
+    #######################################
+
+    def fkm(self, q: Optional[Vector] = None, axis: str ='eef', htm: Optional[HTMatrix]=None,
+            mode: str ='auto') -> List[HTMatrix]:
+        """
+    Compute the forward kinematics for an axis at a given joint and base
+    configuration. Everything is written in the scenario coordinates.
+
+    Parameters
+    ----------
+    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+        The manipulator's joint configuration.
+        (default: the current  joint configuration (robot.q) for the manipulator).
+    axis : string
+        For which axis you want to compute the FK:
+        'eef': for the end-effector;
+        'dh': for all Denavit-Hartenberg axis;
+        'com': for all center-of-mass axis.
+        (default: 'eef').
+    htm : 4x4 numpy matrix
+        The robot base's configuration.
+        (default: the same as the current HTM).
+    mode : string
+        'c++' for the c++ implementation, 'python' for the python implementation
+        and 'auto' for automatic ('c++' is available, else 'python')
+        (default: 'auto').
+
+    Returns
+    -------
+    htm_fk : list of 4x4 numpy matrices
+        For axis='eef', returns a single htm. For the other cases, return
+        n htms as a list of 4x4 numpy matrices.
+    """
+        return _fkm(self, q, axis, htm, mode)
+
+    def ikm(self, htm_tg: HTMatrix, htm: Optional[HTMatrix]=None, q0: Optional[Vector]=None, p_tol: float=0.001,
+            a_tol: float =5, no_iter_max: int =200, ignore_orientation: bool = False,
+            no_tries = 40, check_joint: bool = True, check_auto: bool = True,
+            obstacles: List[MetricObject]=[], mode: str ='auto') -> Vector:
+        """
+    Try to solve the inverse kinematic problem for the end-effector, given a
+    desired homogeneous transformation matrix. It returns the manipulator
+    configuration.
+
+    Uses an iterative algorithm.
+
+    The algorithm can fail, throwing an Exception when it happens.
+
+    Parameters
+    ----------
+    htm_tg : 4x4 numpy matrix
+        The target end-effector HTM, written in scenario coordinates.
+    htm : 4x4 numpy matrix
+        The pose of the basis of the manipulator.
+        (default: 'None' (the current base htm))
+    q0 : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+        Initial guess for the algorithm for the joint configuration.
+        (default: a random joint configuration).
+    p_tol : positive float
+        The accepted error for the end-effector position, in meters.
+        (default: 0.001 m).
+    a_tol : positive float
+        The accepted error for the end-effector orientation, in degrees.
+        (default: 5 degrees).
+    no_iter_max : positive int
+        The maximum number of iterations for the algorithm.
+        (default: 200 iterations).
+    ignore_orientation: boolean
+        If True, the orientation part of the HTM is ignored. Task is position-only.
+        (default: False)
+    no_tries: positive int.
+        How many times the algorithm tries to find a solution.
+        (default: 40)
+    check_joint: boolen
+        If True, consider the joint limits as well.
+        (default: True)
+    check_auto: boolen
+        If True, consider the auto collision of the robot.
+        (default: True)
+    obstacles: list of 'MetricObject' objects
+        List of objects as obstacles to consider.
+        (default: Empty list)
+    mode : string
+        'c++' for the c++ implementation, 'python' for the python implementation
+        and 'auto' for automatic ('c++' is available, else 'python')
+        (default: 'auto').
+
+    Returns
+    -------
+    q : n x 1 numpy matrix
+        The configuration that solves the IK problem.
+    """
+
+        return _ikm(self, htm_tg, htm, q0, p_tol, a_tol, no_iter_max, ignore_orientation,
+                    no_tries, check_joint, check_auto, obstacles, mode)
+
+    def jac_geo(self, q: Optional[Vector] = None, axis: str ='eef', htm : Optional[HTMatrix]=None,
+                mode: str ='auto') -> Tuple[np.matrix,HTMatrix]:
+        """
+    Compute the geometric Jacobian for an axis at a given joint and base
+    configuration. Also returns the forward kinematics as a by-product.
+    Everything is written in the scenario coordinates.
+
+    Parameters
+    ----------
+    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+        The manipulator's joint configuration
+        (default: the current  joint configuration (robot.q) for the manipulator).
+    axis : string
+        For which axis you want to compute the FK:
+        'eef': for the end-effector;
+        'dh': for all Denavit-Hartenberg axis;
+        'com': for all center-of-mass axis.
+        (default: 'eef').
+    htm : 4x4 numpy matrix
+        The robot base's configuration.
+        (default: the same as the current htm).
+    mode : string
+        'c++' for the c++ implementation, 'python' for the python implementation
+        and 'auto' for automatic ('c++' is available, else 'python')
+        (default: 'auto').
+
+    Returns
+    -------
+    jac_geo : 6 x n or list of 6 x n numpy matrices
+        For axis='eef', returns a single 6xn Jacobian. For the other cases,
+        return n Jacobians as a list of n 6xn numpy matrices.
+
+    htm_out : 4 x 4 or list of 4 x 4 numpy matrices
+        For axis='eef', returns a single htm as a 4x4 matrix. For the other cases, return
+        n htms as  a list of n 4x4 numpy matrices.
+    """
+        return _jac_geo(self, q, axis, htm, mode)
+
+    def jac_ana(self, q: Optional[Vector]=None, htm: Optional[HTMatrix]=None) -> Tuple[Matrix,HTMatrix,Vector]:
+        """
+    Compute the analytic Jacobian for the end-effector. The Euler angle
+    convention is zyx. Also returns the end-effector htm and Euler angles
+    as a by-product.
+
+    Parameters
+    ----------
+    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+        The manipulator's joint configuration
+        (default: the current  joint configuration (robot.q) for the manipulator).
+    htm : 4x4 numpy matrix
+        The robot base's configuration.
+        (default: the same as the current htm).
+
+    Returns
+    -------
+    jac_ana : 6 x n numpy matrix
+        The analytic Jacobian.
+
+    htm_eef : 4 x 4 numpy matrix
+        The end-effector htm.
+
+    phi : 3x1 numpy matrix
+        The euler angles in the z (alpha), y (beta) and x (gamma) convention,
+        as a column vector.
+    """
+        return _jac_ana(self, q, htm)
+
+    def jac_jac_geo(self, q: Optional[Vector] =None, axis: str ='eef',
+                    htm: Optional[HTMatrix] = None)-> List[np.matrix]:
+        """
+    Compute the Jacobians of the columns of the geometric Jacobian in the joint variable 'q'.
+    This can be either to the end-effector frames (axis='eef'), to the Denavit-Hartenberg (DH) frames
+    (axis='dh') or to the center-of-mass (COM) frames (axis='com').
+
+    If axis ='dh' or 'com':
+
+    If the robot has n links, jj_geo = robot.jac_jac_geo(q, htm) is a list of lists, in which
+    jj_geo[i][j] is a 6 x n matrix that represents the Jacobian of the j-th column of the geometric
+    Jacobian matrix of the i-th DH or COM frame.
+
+    jj_geo[i][j] for j>i is not computed, because the j-th column of the geometric Jacobian matrix of the
+    i-th DH or COM frame is always the 6 x n zero matrix, regardless of the 'q' and 'htm' chosen.
+
+    jj_geo[i][j] could be alternatively computed numerically. For example, for axis='dh', by defining the function of q
+    f = lambda q_var: np.matrix(robot.jac_geo(q = q_var, htm = htm, axis = 'dh')[0][i][j])
+    and then computing the numerical Jacobian as Utils.jac(f,q).
+    However, this function  is faster and has greater numerical accuracy, since it is computed analytically
+    instead of numerically.
+
+    If axis='eef', this is the same as computing axis='dh' but throwing away all but the last list away.
+
+
+    Parameters
+    ----------
+    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+        The manipulator's joint configuration
+        (default: the current  joint configuration (robot.q) for the manipulator).
+
+    axis : string
+        For which axis you want to compute the FK:
+        'eef': for the end-effector;
+        'dh': for all Denavit-Hartenberg axis;
+        'com': for all center-of-mass axis.
+        (default: 'eef').
+
+    htm : 4x4 numpy matrix
+        The robot base's configuration.
+        (default: the same as the current htm).
+
+    Returns
+    -------
+    jj_geo : list of lists of 6 x n numpy arrays (if axis='dh' or 'com') or a list of 6 x n numpy arrays (if axis=='eef')
+        The Jacobian of the j-th column of the geometric Jacobian matrix of the i-th Denavit-Hartenberg frame.
+
+    """
+        return _jac_jac_geo(self, q, axis, htm)
+
+    #######################################
+    # Methods for control
+    #######################################
+    
+    def task_function(self, htm_tg: HTMatrix, q: Optional[None]=None,
+                      htm: Optional[Vector] = None, mode: str = 'auto') -> Tuple[np.matrix,np.matrix]:
+        """
+    Computes the 6-dimensional task function for end-effector pose control,
+    given a joint configuration, a base configuration and the desired pose
+    'htm_tg'.
+
+    The first three entries are position error, and the three last entries are
+    orientation error.
+
+    Everything is written in scenario coordinates.
+
+    Also returns the Jacobian of this function.
+
+    Parameters
+    ----------
+    htm_tg : 4x4 numpy array
+        The target end-effector pose.
+
+    q : a nD vector (n-element list/tuple, (n,1)/(1,n)/(n,)-shaped numpy matrix/numpy array)
+        The manipulator's joint configuration.
+        (default: the current  joint configuration (robot.q) for the manipulator).
+
+    htm : 4x4 numpy array
+        The robot base's configuration.
+        (default: the same as the current htm).
+
+    mode : string
+        'c++' for the c++ implementation, 'python' for the python implementation
+        and 'auto' for automatic ('c++' is available, else 'python')
+        (default: 'auto').
+
+    Returns
+    -------
+    r : 6 x 1 numpy matrix
+        The task function.
+
+    jac_r : 6 x n numpy matrix
+        The respective task Jacobian.
+    """
+
+        return _task_function(self, htm_tg, q, htm, mode)
+
+    def constrained_control(self, htm_tg: HTMatrix, q: Optional[Vector] = None, obstacles: List[MetricObject]=[],
+                            htm: Optional[HTMatrix] = None, Kp: float =  2.0, eta_obs: float = 0.3, eta_auto: float = 0.3, eta_joint: float = 0.3,
+                              eps_to_obs: float = 0.003, h_to_obs: float = 0.003, eps_auto: float = 0.02,  h_auto: float = 0.05,
+                              d_safe_obs: float = 0.02, d_safe_auto: float = 0.002, d_safe_jl: float = (np.pi/180)*5,
+                              eps_reg: float = 0.01) -> Tuple[np.matrix, float, float, float, float]:
+
+
+
+        return _constrained_control(self, htm_tg, q, obstacles, htm, Kp, eta_obs, eta_auto, eta_joint,
+                              eps_to_obs, h_to_obs, eps_auto,  h_auto, d_safe_obs, d_safe_auto, d_safe_jl,eps_reg)
+
     #######################################
     # Methods for simulation
     #######################################
@@ -832,12 +1293,15 @@ class Robot:
         sim : 'Simulation' object
             'Simulation' object.
     """
+        # This helper may import Simulation for a runtime isinstance check.
+        # Import it only after Robot and its package have finished initializing.
+        from ._add_col_object import _add_col_object
         _add_col_object(self, sim)
 
     def attach_object(self, obj: GroupableObject) -> None:
         """
         Attach an object to the end-effector.
-        The list of the type of objects that can be grouped can be seen in 'Utils.IS_GROUPABLE'.
+        The object must support Uaibot's Groupable interface.
 
         Parameters
         ----------
@@ -858,443 +1322,39 @@ class Robot:
         _detach_object(self, obj)
 
     def set_htm_to_eef(self, htm: HTMatrix) -> None:
+        """Set the tool transform in the last DH frame for both FK backends."""
+        htm = np.matrix(pose_array(htm))
+        if self.cpp_robot is not None:
+            self.cpp_robot.set_htm_extra(self._htm_base_0, htm)
         self._htm_n_eef = htm
 
-    #######################################
-    # Robot constructors
-    #######################################
-
     @staticmethod
-    def create_kuka_kr5(htm: HTMatrix = np.identity(4), name: str ='', color: str ="#df6c25", 
-                        opacity: float =1, eef_frame_visible: bool=True) -> "Robot":
-        """
-    Create a Kuka KR5 R850, a six-degree of freedom manipulator.
-    Thanks Sugi-Tjiu for the 3d model (see https://grabcad.com/library/kuka-kr-5-r850).
-
-    Parameters
-    ----------
-    htm : 4x4 numpy matrix
-        The initial base configuration for the robot.
-        (default: np.identity(4))
- 
-    name : string
-        The robot name.
-        (default: empty (automatic)).
-
-    htm : color
-        A HTML-compatible string representing the object color.
-        (default: '#df6c25')'.
-
-    opacity : positive float between 0 and 1
-        The opacity of the robot. 1 = fully opaque and 0 = transparent.
-        (default: 1)
-
-    Returns
-    -------
-    robot : Robot object
-        The robot.
-
-    """
-        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_kuka_kr5(htm, name, color, opacity)
-        return Robot(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
-
-    @staticmethod
-    def create_epson_t6(htm: HTMatrix = np.identity(4), name: str ='', color: str ="white", 
-                        opacity: float =1, eef_frame_visible: bool = True)-> "Robot":
-        """
-    Create an Epson T6, a SCARA manipulator.
-    Thanks KUA for the 3d model (see https://grabcad.com/library/epson-t6-scara-robot-1).
-
-    Parameters
-    ----------
-    htm : 4x4 numpy matrix
-        The initial base configuration for the robot.
-        (default: np.identity(4))
-
-    name : string
-        The robot name.
-        (default: empty (automatic)).
-
-    htm : color
-        A HTML-compatible string representing the object color.
-        (default: 'white')'.
-
-    opacity : positive float between 0 and 1
-        The opacity of the robot. 1 = fully opaque and 0 = transparent.
-        (default: 1)
-
-    Returns
-    -------
-    robot : Robot object
-        The robot.
-
-    """
-        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_epson_t6(htm, name, color, opacity)
-        return Robot(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
-
-    @staticmethod
-    def create_staubli_tx60(htm: HTMatrix = np.identity(4), name: str = '', color: str ="#ff9b00", 
-                            opacity: float =1, eef_frame_visible: bool = True) -> "Robot":
-        """
-    Create a Staubli TX60, a six degree of freedom manipulator.
-    Model taken from the ROS github repository (https://github.com/ros-industrial/staubli).
-
-    Parameters
-    ----------
-    htm : 4x4 numpy matrix
-        The initial base configuration for the robot.
-        (default: np.identity(4))
-
-    name : string
-        The robot name.
-        (default: empty (automatic)).
-
-    htm : color
-        A HTML-compatible string representing the object color.
-        (default: '#ff9b00')'.
-
-    opacity : positive float between 0 and 1
-        The opacity of the robot. 1 = fully opaque and 0 = transparent.
-        (default: 1)
-
-    Returns
-    -------
-    robot : Robot object
-        The robot.
-
-    """
-        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_staubli_tx60(htm, name, color, opacity)
-        return Robot(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
-
-    @staticmethod
-    def create_kuka_lbr_iiwa(htm: HTMatrix = np.identity(4), name: str = '', color: str = "", 
-                             opacity: float =1, eef_frame_visible: bool = True) -> "Robot":
-        """
-    Create a Kuka LBR IIWA 14 R820, a seven degree of freedom manipulator.
-    Model taken from the ROS github repository (https://github.com/ros-industrial/kuka_experimental).
-
-    Parameters
-    ----------
-    htm : 4x4 numpy matrix
-        The initial base configuration for the robot.
-        (default: np.identity(4))
-
-    name : string
-        The robot name.
-        (default: empty (automatic)).
-
-    htm : color
-        A HTML-compatible string representing the object color. 
-        If set to '' (empty string), set colors from textures.
-        (default: '')'.
-
-    opacity : positive float between 0 and 1
-        The opacity of the robot. 1 = fully opaque and 0 = transparent.
-        (default: 1)
-
-    Returns
-    -------
-    robot : Robot object
-        The robot.
-
-    """
-        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_kuka_lbr_iiwa(htm, name, color, opacity)
-        return Robot(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
-
-    @staticmethod
-    def create_franka_emika_3(htm: HTMatrix = np.identity(4), name: str = '', color : str = "", 
-                              opacity: float = 1, eef_frame_visible: bool = True) -> "Robot":
-        """
-    Create a Franka Emika 3, a seven degree of freedom manipulator.
-    Model taken from the ROS github repository (https://github.com/BolunDai0216/FR3Env/tree/d5218531471cadafd395428f8c2033f6feeb3555/FR3Env/robots/meshes/visual).
-
-    Parameters
-    ----------
-    htm : 4x4 numpy matrix
-        The initial base configuration for the robot.
-        (default: np.identity(4))
-
-    name : string
-        The robot name.
-        (default: empty (automatic)).
-
-    htm : color
-        A HTML-compatible string representing the object color. 
-        If set to '' (empty string), set colors from textures.
-        (default: '')'.
-
-    opacity : positive float between 0 and 1
-        The opacity of the robot. 1 = fully opaque and 0 = transparent.
-        (default: 1)
-
-    Returns
-    -------
-    robot : Robot object
-        The robot.
-
-    """
-        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_franka_emika_3(htm, name, color, opacity)
-        return Robot(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
-
-    @staticmethod
-    def create_abb_crb(htm : HTMatrix = np.identity(4), name: str = '', color: str = "white", 
-                       opacity: float = 1, eef_frame_visible: bool = True) -> "Robot":
-        """
-    Create a ABB CRB 15000, a six degree of freedom manipulator.
-    Model taken from the ROS github repository (https://github.com/ros-industrial/abb_experimental).
-
-    Parameters
-    ----------
-    htm : 4x4 numpy matrix
-        The initial base configuration for the robot.
-        (default: np.identity(4))
-
-    name : string
-        The robot name.
-        (default: empty (automatic)).
-
-    htm : color
-        A HTML-compatible string representing the object color.
-        (default: 'white')'.
-
-    opacity : positive float between 0 and 1
-        The opacity of the robot. 1 = fully opaque and 0 = transparent.
-        (default: 1)
-
-    Returns
-    -------
-    robot : Robot object
-        The robot.
-
-    """
-        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_abb_crb(htm, name, color, opacity)
-        return Robot(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
-
-    @staticmethod
-    def create_magician_e6(htm: HTMatrix = np.identity(4), name: str = "", color: str = "", 
-                           opacity: float = 1, eef_frame_visible: bool = True) -> "Robot":
-        """
-    Create a DOBOT Magician E6, a six degree of freedom manipulator.
-    Model taken from the ROS github repository (https://github.com/Dobot-Arm/TCP-IP-ROS-6AXis).
-
-    Parameters
-    ----------
-    htm : 4x4 numpy matrix
-        The initial base configuration for the robot.
-        (default: np.identity(4))
-
-    name : string
-        The robot name.
-        (default: empty (automatic)).
-
-    htm : color
-        A HTML-compatible string representing the object color.
-        (default: '')'.
-
-    opacity : positive float between 0 and 1
-        The opacity of the robot. 1 = fully opaque and 0 = transparent.
-        (default: 1)
-
-    Returns
-    -------
-    robot : Robot object
-        The robot.
-
-    """
-        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_magician_e6(htm, name, color, opacity)
-        return Robot(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
-    
-    @staticmethod
-    def create_darwin_mini(htm: HTMatrix = np.identity(4), name: str = "", color: str = "#3e3f42", 
-                           opacity: float = 1, eef_frame_visible: bool = True) -> GroupableObject:
-        """
-    Create an (oversized) Darwin Mini, a humanoid robot.
-    Thanks to Alexandre Le Falher for the 3D model (https://grabcad.com/library/darwin-mini-1).
-
-    Parameters
-    ----------
-    htm : 4x4 numpy matrix
-        The initial base configuration for the robot.
-        (default: np.identity(4))
-
-    name : string
-        The robot name.
-        (default: empty (automatic)).
-
-    htm : color
-        A HTML-compatible string representing the object color.
-        (default: '#3e3f42').
-
-    opacity : positive float between 0 and 1
-        The opacity of the robot. 1 = fully opaque and 0 = transparent.
-        (default: 1)
-
-    Returns
-    -------
-    robot : Group object
-        The robot. It is composed of a group of six objects: the two arms and legs (members of 'Robot' class)
-        and the chest and head (both 'RigidObject' class)
-
-
-    """
-
-        param_arm_left, param_arm_right, param_leg_left, param_leg_right, head, chest = _create_darwin_mini(htm, name,
-                                                                                                            color,
-                                                                                                            opacity)
-        desl_z = htm * Utils.trn([0, 0, -0.18])
-        robot_arm_left = Robot(name + "__arm_left", param_arm_left[1], param_arm_left[0],
-                               desl_z * Utils.trn([0, 0.14, 1]) * Utils.rotx(-3.14 / 2), param_arm_left[2],
-                               param_arm_left[3], [np.pi/2,0.3,0], eef_frame_visible,
-                               param_arm_left[5])
-
-        robot_arm_right = Robot(name + "__arm_right", param_arm_right[1], param_arm_right[0],
-                                desl_z * Utils.rotz(3.14) * Utils.trn([0, 0.14, 1]) * Utils.rotx(-3.14 / 2),
-                                param_arm_right[2],
-                                param_arm_right[3], [np.pi/2,0.3,0], eef_frame_visible, param_arm_right[5])
-
-        robot_leg_left = Robot(name + "__leg_left", param_leg_left[1], param_leg_left[0],
-                               desl_z * Utils.trn([0, -0.1, 0.7]) * Utils.roty(np.pi / 2) * Utils.rotz(-np.pi / 2),
-                               param_leg_left[2], param_leg_left[3], [np.pi/2, 0, 0, np.pi/2], eef_frame_visible, param_leg_left[5])
-
-        robot_leg_right = Robot(name + "__leg_right", param_leg_right[1], param_leg_right[0],
-                                desl_z * Utils.trn([0, 0.1, 0.7]) * Utils.roty(np.pi / 2) * Utils.rotz(-np.pi / 2),
-                                param_leg_right[2], param_leg_right[3], [np.pi/2, 0, 0, np.pi/2], eef_frame_visible, param_leg_right[5])
-
-        return Group([robot_arm_left, robot_arm_right, robot_leg_left, robot_leg_right, head, chest])
-
-    @staticmethod
-    def create_davinci(htm: HTMatrix = np.identity(4), name: str = "", color: str = "#3e3f42", 
-                       opacity: float = 1, eef_frame_visible: bool = True) -> GroupableObject:
-        """
-        Create a da Vinci Si, a surgical robot.
-        Thanks to Koray Okan for the 3D model (https://grabcad.com/library/da-vinci-surgical-robot-1/details).
-        Created by Felipe Bartelt.
-        Parameters
-        ----------
-        htm : 4x4 numpy matrix
-            The initial base configuration for the robot.
-            (default: np.identity(4))
-        name : string
-            The robot name.
-            (default: empty (automatic)).
-        htm : color
-            A HTML-compatible string representing the object color.
-            (default: '#3e3f42').
-        opacity : positive float between 0 and 1
-            The opacity of the robot. 1 = fully opaque and 0 = transparent.
-            (default: 1)
-        Returns
-        -------
-        robot : Group object
-            The robot. It is composed of a group of six objects: the two arms and legs (members of 'Robot' class)
-            and the chest and head (both 'RigidObject' class)
-        """
-
-        return _create_davinci(htm, name, color, opacity, eef_frame_visible)
-    
-    @staticmethod
-    def create_kinova_gen3(
-        htm: HTMatrix = np.eye(4),
-        name: str = "",
-        color: str = "#e6e1e1",
-        opacity: float = 1.0,
-        eef_frame_visible: bool = True
-        ) -> "Robot":
-        """Create a Kinova Gen3-7DoF, a seven degree of freedom 
-        manipulator.
-
-        Model from Kinova Resources (https://www.kinovarobotics.com/resources
-        Gen3 CAD model (7DoF)). Manipulator parameters taken from the official 
-        Kinova Gen3 documentation (GEN3 User Guide), available at
-        https://www.kinovarobotics.com/resources.
-        There is no gripper in this model, because it is not available.
-
-        Parameters
-        ----------
-        htm : 4x4 numpy array or 4x4 nested list
-            The initial base configuration for the robot.
-            (default: np.identity(4))
-        name : string
-            The robot name.
-            (default: empty (automatic)).
-        color: string
-            A HTML-compatible string representing the object color.
-            (default: '#e6e1e1').
-        opacity : positive float between 0 and 1
-            The opacity of the robot. 1 = fully opaque and 0 = transparent.
-            (default: 1)
-
-        Returns
-        -------
-        robot : Robot object
-            The robot.
-        """
-
-        return _create_kinova_gen3(htm, name, color, opacity, eef_frame_visible)
-    
-    @staticmethod
-    def create_jaco(
-        htm: HTMatrix = np.eye(4),
-        name: str = "",
-        color: str | list | None = None,
-        opacity: float = 1.0,
-        eef_frame_visible: bool = True
-        ) -> "Robot":
-        """Create a Kinova Jaco 2, a six degree of freedom manipulator.
-        Model taken from Kinova resources 
-        (https://www.kinovarobotics.com/resources?r=79302&s).
-        Robot documentation available at 
-        https://www.kinovarobotics.com/resources?r=339.
-        The gripper is not yet controllable.
-
-        Parameters
-        ----------
-        htm : 4x4 numpy array or 4x4 nested list
-            The initial base configuration for the robot.
-            (default: np.identity(4))
-        name : string
-            The robot name.
-            (default: empty (automatic)).
-        color : string or list or None
-            A HTML-compatible string representing the object color or a list of
-            HTML-compatible strings representing the object color. The list 
-            should have three elements, representing the color of the links, 
-            plastic rings, and the nails, respectively. If less than three 
-            elements are provided, the remaining elements will be set to the
-            last element of the list. If a single string is provided, it will
-            be used for all three elements.
-            If set to None, the default color scheme is used, which is a list
-            of three strings: ["#3e3f42", "#919090", "#1d1d1f"].
-        opacity : positive float between 0 and 1
-            The opacity of the robot. 1 = fully opaque and 0 = transparent.
-            (default: 1)
-
-        Returns
-        -------
-        robot : Robot object
-            The robot.
-        """
-
-        return _create_jaco(htm, name, color, opacity, eef_frame_visible)
-    
-    @staticmethod
-    def create_ur_ur3e(
-        htm: HTMatrix = np.eye(4),
-        name: str = "",
-        color: str | list | None = 'white',
-        opacity: float = 1.0,
-        eef_frame_visible: bool = True
-        ) -> "Robot":
-
-        base_3d_obj, links, htm_base_0, htm_n_eef, q0, joint_limits = _create_ur_ur3e(htm, name, color, opacity)
-        return Robot(name, links, base_3d_obj, htm, htm_base_0, htm_n_eef, q0, eef_frame_visible, joint_limits)
-
-    
-    
-    
-    #######################################
-    # Distance computation and collision
-    #######################################
+    def _validated_joint_limits(limits, n):
+        if not Utils.is_a_matrix(limits, n, 2):
+            raise ValueError(f"joint_limits must be an {n} x 2 real matrix")
+        limits = np.matrix(limits, dtype=float)
+        if np.isnan(limits).any() or np.any(limits[:, 0] >= limits[:, 1]):
+            raise ValueError("Each joint limit requires lower < upper")
+        return limits
+
+    def _set_joint_limits(self, limits):
+        limits = self._validated_joint_limits(limits, len(self._links))
+        if self.cpp_robot is not None:
+            _set_joint_parameters(self.cpp_robot, self._links, limits)
+        self._joint_limit = limits
+
+    def _prepare_link_collision(self, link, obj, htm):
+        cpp_robot = self.cpp_robot
+        if cpp_robot is None:
+            return None
+        indices = [i for i, item in enumerate(self._links) if item is link]
+        native = Utils.obj_to_cpp(obj, htm)
+
+        def add_primitive():
+            for i in indices:
+                cpp_robot.add_geo_prim(i, native)
+
+        return add_primitive
 
     def compute_dist(self, obj: MetricObject, q: Optional[Vector] = None, htm: Optional[HTMatrix]=None, 
                      old_dist_struct : Optional["DistStructRobotObj"] = None, tol: float = 0.0005, 
@@ -1568,3 +1628,4 @@ class Robot:
                               tol, dist_tol, no_iter_max, mode)
      
     #######################################################################################################
+

@@ -1,4 +1,4 @@
-from utils import *
+from uaibot.utils import *
 import numpy as np
 
 
@@ -25,33 +25,36 @@ def _jac_jac_geo(self, q=None, axis='eef', htm=None):
         raise Exception("The parameter 'htm' should be a 4x4 homogeneous transformation matrix.")
     # end error handling
 
-    if (axis == 'eef') or (axis == 'dh'):
-        jac_geo, htm_dh = self.jac_geo(q=q, htm=htm, axis='dh')
+    htm = Utils.cvt(htm)
+    if axis == 'com':
+        joint_jac, joint_frames = self.jac_geo(q=q, htm=htm, axis='dh', mode='python')
+        jac_geo, target_frames = self.jac_geo(q=q, htm=htm, axis='com')
     else:
-        jac_geo, htm_dh = self.jac_geo(q=q, htm=htm, axis='com')
+        joint_jac, joint_frames = self.jac_geo(q=q, htm=htm, axis='dh')
+        jac_geo, target_frames = joint_jac, joint_frames
 
     jj_geo = []
 
     htm0 = htm * self._htm_base_0
 
     for i in range(n):
-        p_i = htm_dh[i][0:3, 3]
+        p_i = target_frames[i][0:3, 3]
         L_i = []
         for j in range(i + 1):
 
             L_ij = np.matrix(np.zeros((6, n)))
 
             if j > 0:
-                p_j_ant = htm_dh[j - 1][0:3, 3]
-                z_j_ant = htm_dh[j - 1][0:3, 2]
+                p_j_ant = joint_frames[j - 1][0:3, 3]
+                z_j_ant = joint_frames[j - 1][0:3, 2]
 
                 if self.links[j].joint_type == 0:
-                    L_ij[0:3, :] = Utils.S(p_i - p_j_ant) * Utils.S(z_j_ant) @ jac_geo[j - 1][3:6, :] + Utils.S(
-                        z_j_ant) * (jac_geo[i][0:3, :] - jac_geo[j - 1][0:3, :])
-                    L_ij[3:6, :] = -Utils.S(z_j_ant) * jac_geo[j - 1][3:6, :]
+                    L_ij[0:3, :] = Utils.S(p_i - p_j_ant) * Utils.S(z_j_ant) @ joint_jac[j - 1][3:6, :] + Utils.S(
+                        z_j_ant) * (jac_geo[i][0:3, :] - joint_jac[j - 1][0:3, :])
+                    L_ij[3:6, :] = -Utils.S(z_j_ant) * joint_jac[j - 1][3:6, :]
 
                 if self.links[j].joint_type == 1:
-                    L_ij[0:3, :] = -Utils.S(z_j_ant) * jac_geo[j - 1][3:6, :]
+                    L_ij[0:3, :] = -Utils.S(z_j_ant) * joint_jac[j - 1][3:6, :]
                     # L_ij[3:6, :] = np.zeros((3, n))
 
             else:
@@ -71,7 +74,7 @@ def _jac_jac_geo(self, q=None, axis='eef', htm=None):
         jj_geo.append(L_i)
 
     if axis == 'dh' or axis == 'com':
-        return jj_geo, jac_geo, htm_dh
+        return jj_geo, jac_geo, target_frames
 
     if axis == 'eef':
-        return jj_geo[-1], jac_geo[-1], htm_dh[-1]
+        return jj_geo[-1], jac_geo[-1], target_frames[-1]

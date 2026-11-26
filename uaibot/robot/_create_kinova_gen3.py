@@ -6,7 +6,7 @@ from uaibot.simobjects.box import Box
 from uaibot.graphics.model3d import Model3D
 from uaibot.graphics.meshmaterial import MeshMaterial
 from uaibot.robot.links import Link
-from uaibot.utils import Utils
+from ._dynamics import dynamics_backend
 
 # TODO
 """The function _create_kinova_gen3 needs to be updated in the future. Its
@@ -15,6 +15,7 @@ offsets in DHT yet. The initial configuration is set to q0=pi for all joints
 after the first joint. This is a workaround and will raise errors if one checks
 joint limits, as this initial configuration is outside the joint limits.
 """
+
 
 def _create_kinova_gen3(
     htm, name="", color="#e6e1e1", opacity=1.0, eef_frame_visible=True
@@ -262,7 +263,7 @@ def _create_kinova_gen3(
         return np.array([[Ixx, Ixy, Ixz], [Ixy, Iyy, Iyz], [Ixz, Iyz, Izz]])
 
     # Base Inertia Matrix: [[0.004622, 0.000009, 0.000060], [*, 0.004495, 0.000009], [*, *, 0.002079]]
-    list_inertia_mat_ = [
+    inertias_at_com_dh = [
         inertia_map(0.004570, 0.000001, 0.000002, 0.004831, 0.000448, 0.001409),
         inertia_map(0.011088, 0.000005, 0.000000, 0.001072, -0.000691, 0.011255),
         inertia_map(0.010932, 0.000000, -0.000007, 0.011127, 0.000606, 0.001043),
@@ -271,12 +272,6 @@ def _create_kinova_gen3(
         inertia_map(0.001641, 0.000000, 0.000000, 0.000410, -0.000278, 0.001641),
         inertia_map(0.000587, 0.000003, 0.000003, 0.000369, 0.000118, 0.000609),
     ]
-    # Map inertia matrices do DHT frames using Steiner's theorem:
-    list_inertia_mat = [
-        M - (list_mass[i] * Utils.S(list_com[i]) @ Utils.S(list_com[i]))
-        for i, M in enumerate(list_inertia_mat_)
-    ]
-
     ## Collision models
     col_model = [[], [], [], [], [], [], []]
     # BEST COLLISION PRIMITIVE FOR BASE: CYLINDER
@@ -288,7 +283,7 @@ def _create_kinova_gen3(
     #  radius = 0.0507586109592414
     #  height = 0.170848
     opacity_col = 0.5
-    htm_col1 = Utils.inv_htm(H01) @  np.array(
+    htm_col1 = Utils.inv_htm(H01) @ np.array(
         [
             [3.09016994e-01, 9.51056516e-01, 0.00000000e00, -7.07423947e-06],
             [-9.51056516e-01, 3.09016994e-01, 0.00000000e00, 6.92558177e-03],
@@ -307,7 +302,7 @@ def _create_kinova_gen3(
         )
     )
 
-    htm_col2 = Utils.inv_htm(H02) @  np.array(
+    htm_col2 = Utils.inv_htm(H02) @ np.array(
         [
             [-6.65636469e-04, -9.99999776e-01, -7.46406454e-05, 6.83465448e-06],
             [-9.93771408e-01, 6.69808282e-04, -1.11435810e-01, -2.19731881e-02],
@@ -326,7 +321,7 @@ def _create_kinova_gen3(
         )
     )
 
-    htm_col3 = Utils.inv_htm(H03) @  np.array(
+    htm_col3 = Utils.inv_htm(H03) @ np.array(
         [
             [-3.09016994e-01, 9.51056516e-01, -3.78436673e-17, -3.25325421e-18],
             [9.51056516e-01, 3.09016994e-01, 1.16470832e-16, -7.86769618e-03],
@@ -345,7 +340,7 @@ def _create_kinova_gen3(
         )
     )
 
-    htm_col4 = Utils.inv_htm(H04) @  np.array(
+    htm_col4 = Utils.inv_htm(H04) @ np.array(
         [
             [-1.00000000e00, 0.00000000e00, -1.22464680e-16, -1.99496634e-06],
             [0.00000000e00, 1.00000000e00, 0.00000000e00, -3.71880150e-02],
@@ -364,7 +359,7 @@ def _create_kinova_gen3(
         )
     )
 
-    htm_col5 = Utils.inv_htm(H05) @   np.array(
+    htm_col5 = Utils.inv_htm(H05) @ np.array(
         [
             [8.09016994e-01, 5.87785252e-01, 0.00000000e00, 7.29375607e-08],
             [-5.87785252e-01, 8.09016994e-01, 0.00000000e00, -1.49007990e-02],
@@ -383,7 +378,7 @@ def _create_kinova_gen3(
         )
     )
 
-    htm_col6 = Utils.inv_htm(H06) @  np.array(
+    htm_col6 = Utils.inv_htm(H06) @ np.array(
         [
             [1.41128252e-04, 9.99999989e-01, -4.35454376e-05, -2.08329652e-06],
             [-9.55547739e-01, 1.47693563e-04, 2.94836391e-01, -3.82612302e-02],
@@ -402,7 +397,7 @@ def _create_kinova_gen3(
         )
     )
 
-    htm_col7_0 = Utils.inv_htm(H07) @  np.array(
+    htm_col7_0 = Utils.inv_htm(H07) @ np.array(
         [
             [8.09016994e-01, 5.87785252e-01, 0.00000000e00, 4.00000000e-06],
             [-5.87785252e-01, 8.09016994e-01, 0.00000000e00, -1.67555410e-02],
@@ -420,7 +415,7 @@ def _create_kinova_gen3(
             opacity=opacity_col,
         )
     )
-    htm_col7_1 = Utils.inv_htm(H07) @  np.array(
+    htm_col7_1 = Utils.inv_htm(H07) @ np.array(
         [
             [0.00000000e00, -2.62118281e-04, 9.99999966e-01, 1.34355361e-06],
             [0.00000000e00, 9.99999966e-01, 2.62118281e-04, 3.39492827e-02],
@@ -452,9 +447,6 @@ def _create_kinova_gen3(
                 a=link_info[3][i],
                 joint_type=link_info[4][i],
                 list_model_3d=link_3d_obj[i],
-                # com_coordinates=list_com[i], # DEPRECATED PARAMETERS IN UAIBOT>=1.2.2
-                # mass=list_mass[i],
-                # inertia_matrix=list_inertia_mat[i],
             )
         )
 
@@ -476,7 +468,7 @@ def _create_kinova_gen3(
 
     htm_eef = np.eye(4)
 
-    robot_ = rb.Robot(
+    robot_ = rb.Manipulator(
         name,
         links,
         base_3d_obj,
@@ -488,4 +480,14 @@ def _create_kinova_gen3(
         joint_limits=joint_limits,
     )
 
+    # The stored matrices are about each COM, in the corresponding DH axes.
+    # The DH adapter rotates and translates the link data into joint frames.
+    robot_._configure_dh_dynamics(
+        list_mass,
+        list_com,
+        inertias_at_com_dh,
+        "com",
+        (0.0, 0.0, -9.81),
+        dynamics_backend(required=False),
+    )
     return robot_
