@@ -1,7 +1,8 @@
-from utils import *
+from uaibot.utils import *
+from uaibot.utils.types import HtmlDiv
 
 
-class HTMLDiv:
+class HTMLDiv(HtmlDiv):
     """
   A HTML div that is used to display a text into the scenario canvas.
 

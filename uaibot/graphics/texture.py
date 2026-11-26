@@ -1,4 +1,4 @@
-from utils import *
+from uaibot.utils import *
 from typing import Optional, Tuple, List
 
 class Texture:

@@ -1,12 +1,11 @@
-from robot.links import Link
-import robot as rb
-from utils import Utils
-from graphics.meshmaterial import MeshMaterial
-from graphics.model3d import Model3D
-from simobjects.rigidobject import RigidObject
-from simobjects.pointlight import PointLight
-from simulation import Simulation
-from simobjects.frame import Frame
+from uaibot.robot.links import Link
+import uaibot.robot as rb
+from uaibot.utils import Utils
+from uaibot.graphics.meshmaterial import MeshMaterial
+from uaibot.graphics.model3d import Model3D
+from uaibot.simobjects.rigidobject import RigidObject
+from uaibot.simobjects.pointlight import PointLight
+from uaibot.simobjects.frame import Frame
 import numpy as np
 
 def map_color(color):

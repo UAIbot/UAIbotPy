@@ -247,3 +247,4 @@ class Link:
         string += "model3d: object3d_" + name_link + "_list}; \n \n"
 
         return string
+

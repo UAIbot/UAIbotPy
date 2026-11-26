@@ -38,6 +38,8 @@ import tempfile
 
 __all__ = ["Simulation"]
 
+__all__ = ["Simulation"]
+
 class Simulation:
     """
   A simulation variable.

@@ -1,10 +1,10 @@
-from utils import Utils
+from uaibot.utils import Utils
 
-from graphics.meshmaterial import MeshMaterial
-from graphics.model3d import Model3D
-from simobjects.box import Box
-from simobjects.cylinder import Cylinder
-from robot.links import Link
+from uaibot.graphics.meshmaterial import MeshMaterial
+from uaibot.graphics.model3d import Model3D
+from uaibot.simobjects.box import Box
+from uaibot.simobjects.cylinder import Cylinder
+from uaibot.robot.links import Link
 
 import numpy as np
 

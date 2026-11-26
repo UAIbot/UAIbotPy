@@ -1,5 +1,5 @@
-from utils import *
-from graphics.meshmaterial import *
+from uaibot.utils import *
+from uaibot.graphics.meshmaterial import *
 import numpy as np
 from uaibot.utils.types import HTMatrix, Matrix, Vector, SimObject
 
